@@ -1,0 +1,17 @@
+# Build-Artefakte
+*.exe
+*.obj
+
+# Sensible Daten - NIE committen
+list.txt
+rules.txt
+*.tc
+*vc_header*
+geknackt.txt
+
+# Laufzeit / Zustand / Cache
+vcrack_state.txt
+vcrack_cache.txt
+vcrack_bench.txt
+gui_run.log
+*.bak

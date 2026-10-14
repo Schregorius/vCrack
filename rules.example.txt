@@ -1,0 +1,36 @@
+# =====================================================================
+# vcrack Regeldatei (Beispiel)  -  rules.example.txt
+#
+# Nach rules.txt kopieren und an die EIGENEN Woerter (list.txt) anpassen.
+# Zeilen mit # sind Kommentare. Gross-/Kleinschreibung der Regel-Woerter egal.
+# Aenderungen werden zur Laufzeit geladen - kein Neukompilieren noetig.
+#
+# Regeltypen:
+#   laenge A B                      Kandidat besteht aus A..B Woertern
+#   abpos N : w1 w2 ...             diese Woerter nur AB Position N
+#   nachbarn-verboten L.. -> R..    Uebergang verbieten (links L -> rechts R)
+#   exklusiv w1 w2 ...              hoechstens EINES dieser Woerter pro Kandidat
+#   nicht-am-ende N : w1 ...        diese Woerter nicht in den letzten N Positionen
+#   max-ein-ever                    spezielle "ever"-Kombinationslogik
+#
+# Die folgenden Woerter (word1..) sind nur Platzhalter - ersetze sie durch
+# die Woerter aus deiner list.txt.
+# =====================================================================
+
+laenge 7 10
+
+# Zahl/Sonderzeichen erst spaeter im Satz
+abpos 4 : 1 !
+abpos 3 : for
+
+# Beispiel: nach bestimmten Woertern darf word1 nicht folgen
+nachbarn-verboten  word2 word3 it me  ->  word1
+
+# nur eine Schreibweise pro Kandidat zulassen
+exklusiv without withOut
+
+# bestimmte Woerter nicht ganz am Ende
+nicht-am-ende 3 : word1 word4
+
+# hoechstens ein "ever"-Konzept pro Kandidat
+max-ein-ever
