@@ -241,6 +241,89 @@ static string wordsCsvCur(){ vector<string> v; for(auto&w:W) v.push_back(w.text)
 static unordered_set<string> csvToSet(const string&csv){ unordered_set<string> s; string cur; for(char c:csv){ if(c==','){ if(!cur.empty())s.insert(cur); cur.clear(); } else cur+=c; } if(!cur.empty()) s.insert(cur); return s; }
 static bool subsetOf(const unordered_set<string>&a,const unordered_set<string>&b){ if(a.size()>b.size()) return false; for(auto&x:a) if(!b.count(x)) return false; return true; }
 
+// ---- Regel-Serialisierung fuer Resume (pipe-frei, spaeter re-evaluierbar) ----
+// Jeder erledigte Block speichert NEBEN dem Hash seine komplette Regelmenge als
+// Text. Dadurch kann vcrack fuer jeden aktuellen Kandidaten exakt pruefen, ob ein
+// frueher erledigter Block ihn bereits erzeugt (und damit getestet) hat - egal ob
+// sich seither Woerter ODER Regeln geaendert haben. Nichts wird je doppelt getestet,
+// und eine Regelaenderung verwirft keinen Fortschritt mehr.
+// Format je Regel:  type~a~b~leftcsv~rightcsv   (Regeln mit ';' getrennt).
+static string ruleWordsCsv(vector<string> v){ for(auto&x:v)x=lower(x); sort(v.begin(),v.end());
+    string s; for(size_t i=0;i<v.size();i++){ if(i)s+=","; s+=v[i]; } return s; }
+static string rulesSerialize(){
+    string out;
+    for(const Rule&r:RULES){
+        if(!out.empty()) out+=";";
+        out+=r.type+"~"+to_string(r.a)+"~"+to_string(r.b)+"~"+ruleWordsCsv(r.left)+"~"+ruleWordsCsv(r.right);
+    }
+    return out.empty()? string("-") : out;   // "-" markiert leere Regelmenge (nicht "kein Eintrag")
+}
+static vector<string> splitCh(const string&s,char d){ vector<string> f; string c;
+    for(char ch:s){ if(ch==d){ f.push_back(c); c.clear(); } else c+=ch; } f.push_back(c); return f; }
+struct CoverRule{ string type; int a=0,b=0; vector<string> left,right; };
+static vector<CoverRule> rulesParse(const string&blob){
+    vector<CoverRule> rs; if(blob.empty()||blob=="-") return rs;
+    for(const string&part:splitCh(blob,';')){ if(part.empty()) continue;
+        vector<string> f=splitCh(part,'~'); if(f.size()<5) continue;
+        CoverRule r; r.type=f[0]; r.a=atoi(f[1].c_str()); r.b=atoi(f[2].c_str());
+        if(!f[3].empty()) r.left=splitCh(f[3],','); if(!f[4].empty()) r.right=splitCh(f[4],',');
+        rs.push_back(r); }
+    return rs;
+}
+// Vorkompilierte Alt-Regelmenge eines erledigten Blocks, ausgewertet gegen die
+// AKTUELLE Wortliste. covers() beantwortet: "Hat dieser (jetzt gueltige) Kandidat
+// schon im alten Block existiert?" -> dann ueberspringen.
+struct CompiledCover{
+    uint64_t wordset=0;              // welche AKTUELLEN Woerter lagen im Alt-Wortset
+    uint64_t forbiddenNext[64];
+    int      minPos[64];
+    vector<uint64_t> excl;
+    vector<TailRule> tails;
+    bool maxOneEver=false;
+    void build(const vector<CoverRule>&rules,const unordered_set<string>&oldWords){
+        for(int i=0;i<64;i++){ forbiddenNext[i]=0; minPos[i]=1; }
+        excl.clear(); tails.clear(); maxOneEver=false; wordset=0;
+        for(int k=0;k<Nw;k++) if(oldWords.count(W[k].text)) wordset|=(1ull<<k);
+        auto mask=[&](const vector<string>&toks)->uint64_t{ uint64_t m=0;
+            for(const string&t:toks){ string lt=lower(t);
+                for(int k=0;k<Nw;k++) if(Wlower[k]==lt) m|=(1ull<<k); } return m; };
+        for(const CoverRule&r:rules){
+            if(r.type=="abpos"){ uint64_t m=mask(r.left);
+                for(int k=0;k<Nw;k++) if((m>>k)&1) if(r.a>minPos[k]) minPos[k]=r.a; }
+            else if(r.type=="nachbarn"){ uint64_t lm=mask(r.left),rm=mask(r.right);
+                for(int k=0;k<Nw;k++) if((lm>>k)&1) forbiddenNext[k]|=rm; }
+            else if(r.type=="exklusiv"){ excl.push_back(mask(r.left)); }
+            else if(r.type=="nicht-am-ende"){ tails.push_back({r.a,mask(r.left)}); }
+            else if(r.type=="max-ein-ever"){ maxOneEver=true; }
+            // "laenge" ist pro Block fix -> hier ohne Belang
+        }
+    }
+    // War der Kandidat path[0..len-1] (aktuelle Indizes) unter DIESEN Alt-Regeln gueltig?
+    bool covers(const int*path,int len) const{
+        uint64_t um=0;
+        for(int d=0; d<len; d++){ int i=path[d];
+            if(!((wordset>>i)&1)) return false;                        // Wort war nicht im Alt-Wortset
+            if(d+1<minPos[i]) return false;                            // Positionsregel (abpos)
+            if(d>0 && ((forbiddenNext[path[d-1]]>>i)&1)) return false;  // verbotener Nachbar
+            for(uint64_t g:excl){ if(((g>>i)&1)&&(um&g)) return false; } // exklusiv
+            um|=(1ull<<i);
+        }
+        for(const TailRule&tr:tails)
+            for(int k=len-tr.n;k<len;k++){ if(k<0) continue; if((tr.mask>>path[k])&1) return false; }
+        if(maxOneEver){
+            int everIso=0,everForever=0,everForEver=0,ever4Ever=0,everPart=0;
+            for(int d=0; d<len; d++){ int i=path[d];
+                if(W[i].isEver) everIso++;
+                if(W[i].isForever) everForever++;
+                if(d>0){ const Word&last=W[path[d-1]];
+                    if((last.isFor||last.is4)&&W[i].isEver){ everPart++; if(last.isFor) everForEver++; else ever4Ever++; } } }
+            int ec=(everForever>0)+(everForEver>0)+(ever4Ever>0)+((everIso-everPart)>0);
+            if(ec>1) return false;
+        }
+        return true;
+    }
+};
+
 // Such-Hash = Quersumme aus ALLEN keyspace-relevanten Einstellungen (Woerter + Regeln + Laengen).
 static string searchHash(int mn,int mx){
     string s = wordsCsvCur() + "#" + rulesSignature() + "#" + to_string(mn) + "-" + to_string(mx);
@@ -275,7 +358,7 @@ struct Worker {
     vector<char> used; vector<int> path; vector<unsigned char> buf; uint64_t usedMask=0;
     int everIso=0,everPart=0,everForever=0,everForEver=0,ever4Ever=0;
     uint64_t total=0,produced=0,outCount=0,skipN=0,limitN=UINT64_MAX,tick=0;
-    uint64_t requireMask=0;   // wenn gesetzt: nur Kandidaten ausgeben, die >=1 dieser Woerter nutzen
+    vector<const CompiledCover*> coverSets; // bereits erledigte Konfigs dieses Blocks: deren Kandidaten ueberspringen
     bool done=false,countOnly=false;
     FILE* out=nullptr; vector<unsigned char> obuf;
     int minLen=7,maxLen=10;
@@ -285,14 +368,14 @@ struct Worker {
     void init(bool count,int mn,int mx){
         used.assign(Nw,0); path.assign(Nw,-1); buf.clear(); usedMask=0;
         everIso=everPart=everForever=everForEver=ever4Ever=0;
-        total=produced=outCount=0; tick=0; done=false; countOnly=count; requireMask=0;
+        total=produced=outCount=0; tick=0; done=false; countOnly=count; coverSets.clear();
         obuf.clear(); obuf.reserve((16u<<20)+1024); buf.reserve(256);
         minLen=mn; maxLen=mx; secondWord=-1;
     }
     inline void flushOut(){ if(!obuf.empty()&&out){ fwrite(obuf.data(),1,obuf.size(),out); obuf.clear(); } }
     inline void progressTick(){ if(((++tick) & ((1u<<20)-1))==0) g_progress.fetch_add(1u<<20, memory_order_relaxed); }
-    inline void emit(){
-        if(requireMask && !(usedMask & requireMask)) return;  // schon getestete (nur alte Woerter) ueberspringen
+    inline void emit(int depth){
+        for(const CompiledCover* c:coverSets) if(c->covers(path.data(),depth)) return; // schon getestet -> ueberspringen
         if(countOnly){ total++; progressTick(); return; }
         if(produced<skipN){ produced++; return; }
         if(outCount>=limitN){ done=true; return; }
@@ -316,7 +399,7 @@ struct Worker {
     }
     void gen(int depth){
         if(done) return;
-        if(depth>=minLen&&depth<=maxLen){ if(emitAllowed(depth)) emit(); if(done) return; }
+        if(depth>=minLen&&depth<=maxLen){ if(emitAllowed(depth)) emit(depth); if(done) return; }
         if(depth>=maxLen) return;
         if(depth==0){ for(int i:firstWords){ step(depth,i); g_branchDone.fetch_add(1,memory_order_relaxed); if(done) return; } }
         else if(depth==1 && secondWord>=0){ if(!used[secondWord]) step(depth,secondWord); }
@@ -502,16 +585,17 @@ static int doEstimate(){
     printf("    Treffer beendet frueher; 13721 (SHA-512 Einzel) ist am wahrscheinlichsten.\n"); return 0;
 }
 // ------------------------------- Zustand / Resume --------------------
-struct DoneRec{ string mode; int len; string fw; string rhash; string wcsv; };
+struct DoneRec{ string mode; int len; string fw; string rhash; string wcsv; string rules; };
 static vector<DoneRec> g_state;
 static unordered_map<string,uint64_t> g_part;   // Zwischenstand je Block -> Offset (getestete Kandidaten)
 static const char* STATE_FILE="vcrack_state.txt";
 static vector<string> splitPipe(const string&s,size_t from){
     vector<string> f; string cur; for(size_t i=from;i<s.size();i++){ char c=s[i]; if(c=='|'){ f.push_back(cur); cur.clear(); } else cur+=c; } f.push_back(cur); return f;
 }
-// Schluessel eines Blocks inkl. reqMask (damit Delta- und Volllauf nicht verwechselt werden)
-static string partKey(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,uint64_t reqMask){
-    char rb[20]; snprintf(rb,sizeof(rb),"%016llx",(unsigned long long)reqMask);
+// Schluessel eines Blocks inkl. cfgSig (Signatur der bereits erledigten Konfigs ->
+// Zwischenstand nur fortsetzen, solange der Filterzustand derselbe ist)
+static string partKey(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,uint64_t cfgSig){
+    char rb[20]; snprintf(rb,sizeof(rb),"%016llx",(unsigned long long)cfgSig);
     return mode+"|"+to_string(len)+"|"+fw+"|"+rhash+"|"+wcsv+"|"+rb;
 }
 static void loadState(){
@@ -520,7 +604,8 @@ static void loadState(){
         if(line.rfind("DONE|",0)==0){
             vector<string> f=splitPipe(line,5);
             if(f.size()<5) continue;
-            g_state.push_back(DoneRec{f[0],atoi(f[1].c_str()),f[2],f[3],f[4]});
+            // Feld 6 (Regel-Text) ist neu; Alt-Eintraege haben es nicht -> leer lassen.
+            g_state.push_back(DoneRec{f[0],atoi(f[1].c_str()),f[2],f[3],f[4], f.size()>=6? f[5] : string()});
         } else if(line.rfind("PART|",0)==0){
             // PART|mode|len|fw|rhash|wcsv|reqMaskHex|offset
             vector<string> f=splitPipe(line,5);
@@ -530,16 +615,16 @@ static void loadState(){
         }
     }
 }
-static void appendDone(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv){
+static void appendDone(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,const string&rules){
     FILE*f=fopen(STATE_FILE,"ab");
-    if(f){ fprintf(f,"DONE|%s|%d|%s|%s|%s\n",mode.c_str(),len,fw.c_str(),rhash.c_str(),wcsv.c_str()); fclose(f); }
-    g_state.push_back(DoneRec{mode,len,fw,rhash,wcsv});
+    if(f){ fprintf(f,"DONE|%s|%d|%s|%s|%s|%s\n",mode.c_str(),len,fw.c_str(),rhash.c_str(),wcsv.c_str(),rules.c_str()); fclose(f); }
+    g_state.push_back(DoneRec{mode,len,fw,rhash,wcsv,rules});
 }
-static void writePart(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,uint64_t reqMask,uint64_t offset){
-    char rb[20]; snprintf(rb,sizeof(rb),"%016llx",(unsigned long long)reqMask);
+static void writePart(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,uint64_t cfgSig,uint64_t offset){
+    char rb[20]; snprintf(rb,sizeof(rb),"%016llx",(unsigned long long)cfgSig);
     FILE*f=fopen(STATE_FILE,"ab");
     if(f){ fprintf(f,"PART|%s|%d|%s|%s|%s|%s|%llu\n",mode.c_str(),len,fw.c_str(),rhash.c_str(),wcsv.c_str(),rb,(unsigned long long)offset); fclose(f); }
-    g_part[partKey(mode,len,fw,rhash,wcsv,reqMask)]=offset;
+    g_part[partKey(mode,len,fw,rhash,wcsv,cfgSig)]=offset;
 }
 
 static int exitCodeOf(int rc){
@@ -569,6 +654,7 @@ static bool deviceCheck(){
 static int doRun(){
     loadState();
     string rhash=rulesSignature();
+    string curRules=rulesSerialize();
     unordered_set<string> curSet; for(auto&w:W) curSet.insert(w.text);
     string curCsv=wordsCsvCur();
 
@@ -624,18 +710,31 @@ static int doRun(){
                     shard++;
                     // Block-Schluessel 'fw': bei 2-Wort-Aufteilung "wort1>wort2", sonst "wort1".
                     string fw = (swIdx>=0) ? (W[fwIdx].text+">"+W[swIdx].text) : W[fwIdx].text;
-                    bool full=false; const DoneRec* bestSub=nullptr; size_t bestSz=0;
+                    // Alle fuer DIESEN Block (Mode/Laenge/Startwort) bereits erledigten
+                    // Konfigurationen sammeln. Jede liefert einen CompiledCover; ein Kandidat,
+                    // den irgendeine davon schon erzeugt hat, wird nicht erneut getestet.
+                    // So kostet weder eine Wort- NOCH eine Regelaenderung je Fortschritt.
+                    bool full=false;
+                    vector<CompiledCover> covers;
+                    uint64_t coverSig=0;
                     for(const DoneRec&d:g_state){
-                        if(d.mode!=m.code||d.len!=len||d.fw!=fw||d.rhash!=rhash) continue;
+                        if(d.mode!=m.code||d.len!=len||d.fw!=fw) continue;
                         unordered_set<string> rs=csvToSet(d.wcsv);
-                        if(subsetOf(curSet,rs)){ full=true; break; }      // aktuelle Menge schon (als Teil) getestet
-                        if(subsetOf(rs,curSet)){ if(rs.size()>bestSz){ bestSz=rs.size(); bestSub=&d; } }
+                        bool sameRules = !d.rules.empty() ? (d.rules==curRules) : (d.rhash==rhash);
+                        // Komplett erledigt: identische Regeln UND Alt-Wortset deckt aktuelle Woerter ab.
+                        if(sameRules && subsetOf(curSet,rs)){ full=true; break; }
+                        // Sonst als Cover-Set aufnehmen:
+                        //  - mit gespeicherten Regeln -> exakt auswertbar (jede Aenderung korrekt);
+                        //  - Alt-Eintrag ohne Regeltext -> nur nutzbar, wenn Regel-Signatur == aktuell
+                        //    (dann sind es die aktuellen Regeln), sonst unbekannt -> ignorieren.
+                        if(!d.rules.empty()){
+                            CompiledCover c; c.build(rulesParse(d.rules), rs); covers.push_back(std::move(c));
+                        } else if(d.rhash==rhash){
+                            CompiledCover c; c.build(rulesParse(curRules), rs); covers.push_back(std::move(c));
+                        } else continue;
+                        coverSig = coverSig*1099511628211ull ^ (uint64_t)std::hash<string>{}(d.rhash+"#"+d.wcsv+"#"+d.rules);
                     }
                     if(full){ skipped++; continue; }
-                    uint64_t reqMask=0;
-                    if(bestSub){ unordered_set<string> rs=csvToSet(bestSub->wcsv);
-                        for(int i=0;i<Nw;i++) if(!rs.count(W[i].text)) reqMask|=(1ull<<i);
-                        deltas++; } else tested++;
 
                     // Haeppchengroesse so, dass ein hashcat-Lauf ~gCheckpointSec dauert (aus H/s).
                     uint64_t chunk=UINT64_MAX;
@@ -645,7 +744,7 @@ static int doRun(){
                     }
                     // Zwischenstand fortsetzen?
                     uint64_t offset=0;
-                    { auto it=g_part.find(partKey(m.code,len,fw,rhash,curCsv,reqMask)); if(it!=g_part.end()) offset=it->second; }
+                    { auto it=g_part.find(partKey(m.code,len,fw,rhash,curCsv,coverSig)); if(it!=g_part.end()) offset=it->second; }
 
                     char startDesc[96];
                     if(swIdx>=0) snprintf(startDesc,sizeof(startDesc),"%s > %s",W[fwIdx].text.c_str(),W[swIdx].text.c_str());
@@ -653,10 +752,26 @@ static int doRun(){
 
                     fprintf(stderr,"\n[Block %ld/%ld] %s XTS-%s (%s) -m %s | Laenge %d | Start '%s'%s\n",
                             shard,totalShards,m.hash,m.size,m.cipher,m.code,len,startDesc,
-                            reqMask?"  [nur NEUE Kombinationen]":"");
+                            covers.empty()?"":"  [nur NEUE Kombinationen]");
                     if(chunk!=UINT64_MAX) fprintf(stderr,"    Checkpoint alle ~%ds (%s Kandidaten/Haeppchen)\n",
                             gCheckpointSec,fmtCount((double)chunk).c_str());
                     if(offset>0) fprintf(stderr,"    Fortsetzung ab Kandidat %llu\n",(unsigned long long)offset);
+
+                    // Trocken-Probe: Erzeugt dieser Block (ab offset, nach Cover-Filter) ueberhaupt
+                    // noch etwas Neues? Wenn nicht -> hashcat gar nicht erst starten (spart den
+                    // Start und verhindert, dass hashcat bei LEERER Eingabe einen Fehlercode liefert,
+                    // der faelschlich als GPU-Problem gewertet wuerde). Block trotzdem als erledigt
+                    // markieren, damit ein identischer Folgelauf ihn sofort ueberspringt.
+                    { Worker probe; probe.init(false,len,len); probe.out=nullptr;
+                      for(const CompiledCover&c:covers) probe.coverSets.push_back(&c);
+                      probe.skipN=offset; probe.limitN=1; probe.firstWords.push_back(fwIdx); probe.secondWord=swIdx;
+                      probe.gen(0);
+                      if(probe.outCount==0){
+                          fprintf(stderr,"    -> nichts Neues zu testen, Block uebersprungen.\n");
+                          appendDone(m.code,len,fw,rhash,curCsv,curRules); skipped++; continue;
+                      }
+                    }
+                    if(!covers.empty()) deltas++; else tested++;
 
                     char cmd[768];
                     snprintf(cmd,sizeof(cmd),".\\hashcat.exe -a 0 -m %s -D %d -w %d \"%s\" -o geknackt.txt --potfile-disable --status --status-timer=5 --hwmon-temp-abort=%d",
@@ -666,7 +781,8 @@ static int doRun(){
                     while(!blockDone){
                         remove("geknackt.txt");
                         FILE*hc=POPEN(cmd,"wb"); if(!hc){ fprintf(stderr,"[-] hashcat-Start fehlgeschlagen.\n"); return 1; }
-                        Worker wk; wk.init(false,len,len); wk.out=hc; wk.requireMask=reqMask;
+                        Worker wk; wk.init(false,len,len); wk.out=hc;
+                        for(const CompiledCover&c:covers) wk.coverSets.push_back(&c);
                         wk.skipN=offset; wk.limitN=chunk; wk.firstWords.push_back(fwIdx); wk.secondWord=swIdx;
                         g_progress=0; g_branchDone=0; g_branchTotal=1; g_monitorRun=true;
                         thread mon(monitor,"gen",false,5000);
@@ -688,9 +804,9 @@ static int doRun(){
                         }
                         uint64_t emitted=wk.outCount; offset+=emitted;
                         if(chunk==UINT64_MAX || emitted<chunk) blockDone=true;    // Block erschoepft
-                        else writePart(m.code,len,fw,rhash,curCsv,reqMask,offset); // Zwischenstand sichern (~alle gCheckpointSec)
+                        else writePart(m.code,len,fw,rhash,curCsv,coverSig,offset); // Zwischenstand sichern (~alle gCheckpointSec)
                     }
-                    appendDone(m.code,len,fw,rhash,curCsv);   // Block erst nach vollstaendigem Durchlauf als erledigt markieren
+                    appendDone(m.code,len,fw,rhash,curCsv,curRules);   // Block + seine Regeln als erledigt markieren
                 }
             }
         }

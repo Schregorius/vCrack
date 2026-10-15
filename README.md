@@ -1,4 +1,4 @@
-# vcrack 1.0.1
+# vcrack 1.0.2
 
 **English** | [Deutsch](README-DE.md)
 
@@ -24,7 +24,7 @@ search space from "infinite" to "feasible".
 - **All-in-one `estimate`**: Monte-Carlo keyspace with an error margin (±%) in under a second, the per-length distribution, the measured H/s per hash, and the ETA per mode — one command (replaces separate `sample` + `bench` steps; both still exist as low-level commands).
 - **Header extraction** (`vcrack header --src <volume>`): pulls the VeraCrypt header out of a volume/container into the target file; also available in the GUI.
 - **Resume & checkpoints**: progress is saved per block; within a block at least every few minutes (`--checkpoint`). Aborting never loses more than that interval.
-- **Smart resume on changes**: add a word → only the *new* combinations are tested. Remove a word / tighten a rule → skipped. Nothing is computed twice.
+- **Smart resume on any change** (words *or* rules): progress is tracked as *which candidates were actually tested*. Add a word → only combinations using it are tested. Remove a word, or tighten a rule → everything still valid was already covered, so nothing is re-tested. Loosen a rule → only the newly-unlocked combinations are tested. A rule change never discards progress; each completed block stores its own rule set so past work stays valid.
 - **Search-hash cache**: `count`, `sample` and `estimate` share results as long as words/rules/lengths are unchanged.
 - **Safety check**: only starts if hashcat actually sees a GPU device, and marks a block as done **only** after a genuine (exhausted) hashcat run — no fake progress when the GPU is missing.
 - **Graphical interface** (optional): local Win11-style Fluent web UI, opens in a standalone window.
@@ -151,7 +151,12 @@ adapt it to your words. Maximum **64 words** in the list (internal bitmasks).
 - Within a block, `--checkpoint` stores the offset as a `PART` line.
 - Running `vcrack run` again resumes automatically; finished work is skipped.
 - Changing the word list/length: only the **new** part is tested (the delta), never from scratch.
-- Changing a rule changes the rule signature → safe recomputation.
+- Changing a **rule** resumes too: each completed block records its own rule set, so on the
+  next run every still-valid candidate that an already-completed block produced is skipped, and
+  only genuinely new candidates are tested. Tightening a rule tests nothing new; loosening one
+  tests only what it unlocks. (One-time note: blocks finished by an *older* vcrack version that
+  did not yet store rule text can only be credited when the current rules match that block's rule
+  signature; otherwise they are re-checked once.)
 
 State/cache (created automatically, **not** in the repo):
 `vcrack_state.txt`, `vcrack_cache.txt`, `vcrack_bench.txt`.

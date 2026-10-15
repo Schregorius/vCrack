@@ -1,4 +1,4 @@
-# vcrack 1.0.1
+# vcrack 1.0.2
 
 [English](README.md) | **Deutsch**
 
@@ -24,7 +24,7 @@ Suchraum von „unendlich" auf „machbar".
 - **Alles-in-einem `estimate`**: Monte-Carlo-Keyspace mit Fehlerspanne (±%) in <1 s, die Verteilung je Länge, die gemessenen H/s je Hash und die ETA je Modus – ein Befehl (ersetzt die getrennten Schritte `sample` + `bench`; beide gibt es weiter als Low-Level-Befehle).
 - **Header-Extraktion** (`vcrack header --src <volume>`): zieht den VeraCrypt-Header aus einem Volume/Container in die Zieldatei; auch in der GUI.
 - **Resume & Checkpoints**: Fortschritt wird pro Block gespeichert; innerhalb eines Blocks spätestens alle paar Minuten (`--checkpoint`). Abbruch verliert nie mehr als dieses Intervall.
-- **Intelligente Wiederaufnahme bei Änderungen**: Wort hinzufügen → es werden nur die *neuen* Kombinationen getestet. Wort entfernen / Regel verschärfen → übersprungen. Nichts wird doppelt gerechnet.
+- **Intelligente Wiederaufnahme bei JEDER Änderung** (Wörter *oder* Regeln): der Fortschritt wird als *welche Kandidaten tatsächlich getestet wurden* geführt. Wort hinzufügen → nur Kombinationen mit diesem Wort werden getestet. Wort entfernen oder Regel verschärfen → alles noch Gültige war schon abgedeckt, es wird nichts erneut getestet. Regel lockern → nur die neu freigeschalteten Kombinationen. Eine Regeländerung verwirft nie Fortschritt; jeder fertige Block speichert seine eigene Regelmenge.
 - **Such-Hash-Cache**: `count`, `sample` und `estimate` teilen sich Ergebnisse, solange Wörter/Regeln/Längen unverändert sind.
 - **Sicherheits-Check**: Startet nur, wenn hashcat tatsächlich ein GPU-Device sieht, und markiert einen Block **nur** nach einem echten (erschöpften) hashcat-Lauf als erledigt – kein Scheinfortschritt bei fehlender GPU.
 - **Grafische Oberfläche** (optional): lokale Web-UI im Win11-Fluent-Stil, startet in einem eigenständigen Fenster.
@@ -153,7 +153,13 @@ Eine neutrale Vorlage liegt als **`rules.example.txt`** bei. Kopiere sie nach
 - Innerhalb eines Blocks sichert `--checkpoint` den Offset als `PART`-Zeile.
 - `vcrack run` erneut starten setzt automatisch fort; Erledigtes wird übersprungen.
 - Wortliste/Länge ändern: es wird nur das **Neue** getestet (Differenz), nie von vorne.
-- Regeländerung ändert die Regel-Signatur → sicherheitshalber Neuberechnung.
+- **Regeländerung** nimmt ebenfalls wieder auf: jeder fertige Block speichert seine eigene
+  Regelmenge. Beim nächsten Lauf wird jeder noch gültige Kandidat, den ein bereits erledigter
+  Block schon erzeugt hat, übersprungen; nur wirklich neue Kandidaten werden getestet. Verschärfen
+  testet nichts Neues, Lockern nur das neu Freigeschaltete. (Einmaliger Hinweis: Blöcke, die eine
+  *ältere* vcrack-Version ohne gespeicherten Regeltext fertiggestellt hat, können nur dann
+  angerechnet werden, wenn die aktuellen Regeln zur Signatur dieses Blocks passen – sonst werden
+  sie einmalig neu geprüft.)
 
 Zustand/Cache (werden automatisch angelegt, **nicht** im Repo):
 `vcrack_state.txt`, `vcrack_cache.txt`, `vcrack_bench.txt`.
