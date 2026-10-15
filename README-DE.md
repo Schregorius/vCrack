@@ -1,4 +1,4 @@
-# vcrack 1.0.0
+# vcrack 1.0.1
 
 [English](README.md) | **Deutsch**
 
@@ -21,8 +21,8 @@ Suchraum von „unendlich" auf „machbar".
 
 - **Nativer C++-Generator** (keine Laufzeitumgebung nötig), erzeugt Permutationen als Stream direkt in hashcat (`-a 0` stdin-Modus) – nichts wird auf die Platte geschrieben.
 - **Regelsystem** (`rules.txt`): Länge, Positionsregeln, verbotene Nachbarschaften, Ausschlüsse usw. – zur Laufzeit geladen, **kein Neukompilieren** bei Regeländerungen.
-- **Keyspace-Schätzung per Monte-Carlo** mit Fehlerspanne (±%), in <1 s, inkl. DOS-Dashboard und Verteilung pro Länge.
-- **Laufzeit-Schätzung** pro hashcat-Modus (misst H/s, rechnet ETA).
+- **Alles-in-einem `estimate`**: Monte-Carlo-Keyspace mit Fehlerspanne (±%) in <1 s, die Verteilung je Länge, die gemessenen H/s je Hash und die ETA je Modus – ein Befehl (ersetzt die getrennten Schritte `sample` + `bench`; beide gibt es weiter als Low-Level-Befehle).
+- **Header-Extraktion** (`vcrack header --src <volume>`): zieht den VeraCrypt-Header aus einem Volume/Container in die Zieldatei; auch in der GUI.
 - **Resume & Checkpoints**: Fortschritt wird pro Block gespeichert; innerhalb eines Blocks spätestens alle paar Minuten (`--checkpoint`). Abbruch verliert nie mehr als dieses Intervall.
 - **Intelligente Wiederaufnahme bei Änderungen**: Wort hinzufügen → es werden nur die *neuen* Kombinationen getestet. Wort entfernen / Regel verschärfen → übersprungen. Nichts wird doppelt gerechnet.
 - **Such-Hash-Cache**: `count`, `sample` und `estimate` teilen sich Ergebnisse, solange Wörter/Regeln/Längen unverändert sind.
@@ -52,9 +52,16 @@ vcrack-gui.bat      <- GUI-Starter
 gui\                <- GUI-Server + Seite
 ```
 
-**Header extrahieren**: Die ersten 512 KB des VeraCrypt-Volumes genügen (nur die
-ersten 512 Byte werden geprüft). Details zur Header-Gewinnung siehe hashcat-Doku
-zu den VeraCrypt-Modi.
+**Header extrahieren**: macht vcrack für dich —
+
+```
+vcrack header --src E:\meine_videos.hc --target Fvc_header.tc
+```
+
+Kopiert die ersten 512 KB der Quelle (Volume-Datei oder Container) in die Zieldatei;
+geprüft werden nur die ersten 512 Byte, 512 KB decken aber auch versteckte Header ab.
+In der GUI steht das Gleiche unter **Cockpit → Header auslesen**. Das Original bleibt
+unverändert.
 
 ## Einrichten / Bauen
 
@@ -73,13 +80,18 @@ und prüft hashcat / GPU / Python. Für einen reinen Neu-Build später `build.ba
 
 ```
 vcrack rules       aktive Regeln anzeigen (aus rules.txt)
-vcrack sample      Keyspace schnell schaetzen (Monte-Carlo, +/- Fehler, Dashboard)
+vcrack estimate    Alles-in-einem: Keyspace + Verteilung je Laenge + H/s je Hash + ETA
 vcrack count       Keyspace exakt zaehlen (langsamer, mehrkernig, gecacht)
-vcrack estimate    Keyspace x H/s -> Laufzeit-Tabelle pro Modus
-vcrack bench       H/s je Hash messen und cachen
+vcrack sample      Low-Level: nur Keyspace-Schaetzung (Monte-Carlo, +/- Fehler)
+vcrack bench       Low-Level: H/s je Hash messen und cachen
+vcrack header      Header aus einem VeraCrypt-Volume in die Zieldatei extrahieren
 vcrack gen         Kandidaten nach stdout (zum Testen/Pipen)
-vcrack run         Angriff: Modi x Laenge x Startwort, mit Resume
+vcrack run         Angriff: Modi x Laenge x Startwort/-woerter, mit Resume
 ```
+
+`estimate` ist der Befehl, den man normalerweise vor einem Lauf braucht – er fasst
+zusammen, was frueher `sample` und `bench` getrennt gemacht haben: Keyspace, die
+Aufteilung je Laenge, die gemessenen H/s je Hash und die daraus folgende Laufzeit je Modus.
 
 ### Optionen
 
@@ -97,14 +109,15 @@ vcrack run         Angriff: Modi x Laenge x Startwort, mit Resume
 | `--temp N` | GPU-Notaus bei N °C (Standard 90) |
 | `--samples N` | Stichproben für sample/estimate (Standard 300000) |
 | `--rebench` | H/s neu messen statt aus Cache |
+| `--src F` | Quelle (Volume/Container) für `header` |
+| `--bytes N` | Bytes für `header` (Standard 524288 = 512 KB) |
 | `--json` | Maschinen-Ausgabe (für die GUI) |
 
 ### Typischer Ablauf
 
 ```
 vcrack rules
-vcrack bench
-vcrack estimate --max 8      # realistische Laufzeiten ansehen
+vcrack estimate --max 8      # Keyspace + Verteilung + H/s + realistische Laufzeiten
 vcrack run --hash SHA-512 --size 512 --max 8
 ```
 
@@ -132,7 +145,10 @@ Eine neutrale Vorlage liegt als **`rules.example.txt`** bei. Kopiere sie nach
 
 ## Resume / Checkpoints
 
-- Durchlauf: pro **Modus** → pro **Länge** → pro **Startwort** = ein Block.
+- Durchlauf: pro **Modus** → pro **Länge** → pro **Startwort** = ein Block. Bei langen
+  Längen (≥ 9) wird jeder Block zusätzlich nach dem **zweiten Wort** aufgeteilt – so
+  schreitet der Fortschritt bei den riesigen Längen 9/10 in vielen kleinen,
+  wiederaufnehmbaren Schritten voran.
 - Jeder fertige Block wird als `DONE`-Zeile in `vcrack_state.txt` gespeichert.
 - Innerhalb eines Blocks sichert `--checkpoint` den Offset als `PART`-Zeile.
 - `vcrack run` erneut starten setzt automatisch fort; Erledigtes wird übersprungen.
@@ -151,8 +167,10 @@ vcrack-gui.bat
 ```
 Startet den lokalen Server (`gui\gui_server.py`, nur Python-Standardbib) und öffnet
 ein **eigenständiges Fenster** (Chrome/Edge im App-Modus). Reiter: **Cockpit**
-(Start/Stop, Live-Status), **Statistik** (Keyspace + Laufzeit), **Regeln**,
-**Wortliste**. Konsolenfenster offen lassen – Schließen beendet den Server.
+(Ziel-Auswahl, Header auslesen, Start/Stop, Live-Kacheln – Tempo, Temperatur,
+Auslastung, Lüfter, GPU-Takt, Block-Restzeit – und Fortschrittsbalken),
+**Statistik** (ein Klick → Keyspace + Verteilung je Länge + Laufzeiten),
+**Regeln**, **Wortliste**. Konsolenfenster offen lassen – Schließen beendet den Server.
 
 ---
 

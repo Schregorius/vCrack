@@ -37,6 +37,29 @@ def write_text(name, content):
     with open(os.path.join(WORK, name), "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
 
+def list_targets():
+    """Moegliche VeraCrypt-Header im Arbeitsordner (fuer den Ziel-Selektor)."""
+    out = []
+    try:
+        for fn in sorted(os.listdir(WORK)):
+            low = fn.lower()
+            full = os.path.join(WORK, fn)
+            if not os.path.isfile(full):
+                continue
+            if low.endswith(".tc") or low.endswith(".hc") or "vc_header" in low:
+                out.append({"name": fn, "size": os.path.getsize(full)})
+    except Exception:
+        pass
+    return out
+
+def extract_header(src, nbytes, target):
+    """vcrack header ... --json aufrufen."""
+    args = ["header", "--src", str(src)]
+    if nbytes:  args += ["--bytes", str(int(nbytes))]
+    if target:  args += ["--target", str(target)]
+    args += ["--json"]
+    return run_json(args, timeout=120)
+
 def run_json(args, timeout=120):
     """vcrack mit --json aufrufen und die JSON-Zeile aus stdout holen."""
     try:
@@ -56,6 +79,7 @@ SPEED_RE = re.compile(r"Speed\.#\d+\.+:\s*([\d.]+)\s*([kMGT]?)H/s", re.I)
 TEMP_RE  = re.compile(r"Temp:\s*(\d+)c", re.I)
 UTIL_RE  = re.compile(r"Util:\s*(\d+)%", re.I)
 FAN_RE   = re.compile(r"Fan:\s*(\d+)%", re.I)
+CORE_RE  = re.compile(r"Core:\s*(\d+)\s*MHz", re.I)
 PROG_RE  = re.compile(r"Progress\.+:\s*(\d+)/(\d+)")
 BLOCK_RE = re.compile(r"\[Block (\d+)/(\d+)\]\s*(.+)")
 TOTAL_RE = re.compile(r"=\s*(\d+)\s*Bloecke")
@@ -63,7 +87,7 @@ MULT = {"": 1, "k": 1e3, "M": 1e6, "G": 1e9, "T": 1e12}
 
 def parse_log():
     """Letzte relevante Werte aus gui_run.log ziehen."""
-    d = {"speed": 0, "temp": 0, "util": 0, "fan": 0,
+    d = {"speed": 0, "temp": 0, "util": 0, "fan": 0, "core": 0,
          "block_idx": 0, "block_total": 0, "block_desc": "",
          "prog_cur": 0, "prog_max": 0, "found": False, "password": "", "tail": ""}
     try:
@@ -77,6 +101,7 @@ def parse_log():
         m = TEMP_RE.search(ln);   d["temp"] = int(m.group(1)) if m else d["temp"]
         m = UTIL_RE.search(ln);   d["util"] = int(m.group(1)) if m else d["util"]
         m = FAN_RE.search(ln);    d["fan"]  = int(m.group(1)) if m else d["fan"]
+        m = CORE_RE.search(ln);   d["core"] = int(m.group(1)) if m else d["core"]
         m = PROG_RE.search(ln);
         if m: d["prog_cur"], d["prog_max"] = int(m.group(1)), int(m.group(2))
         m = BLOCK_RE.search(ln)
@@ -130,6 +155,7 @@ def start_run(cfg):
         if cfg.get("min"):   args += ["--min",  str(cfg["min"])]
         if cfg.get("max"):   args += ["--max",  str(cfg["max"])]
         if cfg.get("device"):args += ["--device", str(cfg["device"])]
+        if cfg.get("target"):args += ["--target", str(cfg["target"])]
         if cfg.get("checkpoint") is not None: args += ["--checkpoint", str(cfg["checkpoint"])]
         logf = open(LOG, "wb")
         kw = {}
@@ -186,6 +212,8 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(200, read_text("list.txt"), "text/plain")
         elif p == "/api/rules":
             self._send(200, read_text("rules.txt"), "text/plain")
+        elif p == "/api/targets":
+            self._send(200, {"targets": list_targets()})
         else:
             self._send(404, {"error": "unbekannt"})
 
@@ -204,6 +232,8 @@ class H(http.server.BaseHTTPRequestHandler):
             if act == "start": self._send(200, start_run(body.get("cfg", {})))
             elif act == "stop": self._send(200, stop_run())
             else: self._send(400, {"error": "action?"})
+        elif p == "/api/header":
+            self._send(200, extract_header(body.get("src", ""), body.get("bytes", 524288), body.get("target", "")))
         elif p == "/api/keyspace":
             args = ["sample", "--min", str(body.get("min", 7)), "--max", str(body.get("max", 10)),
                     "--samples", str(body.get("samples", 300000)), "--json"]

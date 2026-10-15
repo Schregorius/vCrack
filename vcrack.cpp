@@ -219,6 +219,9 @@ static bool gRebench=false;
 static int gCheckpointSec=300;   // Zwischenspeicherung spaetestens alle N Sekunden (0 = aus)
 static bool gJson=false;         // Maschinen-Ausgabe (fuer die GUI)
 static int gWorkload=3;          // hashcat -w (1..4); hoeher = mehr GPU, weniger Desktop-Reaktion
+static string gSrc="";           // Quelle fuer 'header'-Befehl (VeraCrypt-Volume/Containerdatei)
+static long gHeaderBytes=524288; // Bytes fuer Header-Extraktion (512 KB deckt Standard + versteckte Header ab)
+static const int SHARD2_MINLEN=9;// ab dieser Laenge wird je Block zusaetzlich nach dem 2. Wort aufgeteilt (feinere Fortschrittsanzeige)
 
 // ------------------------------- Signatur / Such-Hash / Cache --------
 static string toHex(size_t h){ char b[20]; snprintf(b,sizeof(b),"%016zx",(size_t)h); return b; }
@@ -277,13 +280,14 @@ struct Worker {
     FILE* out=nullptr; vector<unsigned char> obuf;
     int minLen=7,maxLen=10;
     vector<int> firstWords;
+    int secondWord=-1;        // wenn >=0: Tiefe 1 nur dieses Wort (feinere Block-Aufteilung bei langen Laengen)
 
     void init(bool count,int mn,int mx){
         used.assign(Nw,0); path.assign(Nw,-1); buf.clear(); usedMask=0;
         everIso=everPart=everForever=everForEver=ever4Ever=0;
         total=produced=outCount=0; tick=0; done=false; countOnly=count; requireMask=0;
         obuf.clear(); obuf.reserve((16u<<20)+1024); buf.reserve(256);
-        minLen=mn; maxLen=mx;
+        minLen=mn; maxLen=mx; secondWord=-1;
     }
     inline void flushOut(){ if(!obuf.empty()&&out){ fwrite(obuf.data(),1,obuf.size(),out); obuf.clear(); } }
     inline void progressTick(){ if(((++tick) & ((1u<<20)-1))==0) g_progress.fetch_add(1u<<20, memory_order_relaxed); }
@@ -315,6 +319,7 @@ struct Worker {
         if(depth>=minLen&&depth<=maxLen){ if(emitAllowed(depth)) emit(); if(done) return; }
         if(depth>=maxLen) return;
         if(depth==0){ for(int i:firstWords){ step(depth,i); g_branchDone.fetch_add(1,memory_order_relaxed); if(done) return; } }
+        else if(depth==1 && secondWord>=0){ if(!used[secondWord]) step(depth,secondWord); }
         else { for(int i=0;i<Nw;i++){ if(used[i]) continue; step(depth,i); if(done) return; } }
     }
     inline void step(int depth,int i){
@@ -385,6 +390,7 @@ static double benchSpeed(const char*code){
 
 // ------------------------------- Aktionen ----------------------------
 static double sampleKeyspace(int mn,int mx,int samples,double perLen[11],double& ciPct,bool dash); // vorwaerts
+static string barOf(double frac,int w);   // vorwaerts (Definition im Dashboard-Abschnitt)
 
 static int doGen(){
 #ifdef _WIN32
@@ -437,18 +443,27 @@ static int doBench(){
     return 0;
 }
 static int doEstimate(){
-    string h=searchHash(gMinLen,gMaxLen); double N=0; const char* src="";
-    if(cacheGet(h,"exact",N)){ src="exakt, Cache"; }
-    else if(cacheGet(h,"est",N)){ src="Schaetzung, Cache"; }
-    else {
-        double perLen[11]; double ciPct;
-        N=sampleKeyspace(gMinLen,gMaxLen,gSamples,perLen,ciPct,true);
-        cachePut(h,"est",N); src="Schaetzung, neu";
-        if(g_tty) fprintf(stderr,"\n");
+    // estimate = sample (Keyspace + Verteilung) + bench (H/s) + ETA, in einem Schritt.
+    string h=searchHash(gMinLen,gMaxLen);
+    double perLen[11]; double ciPct=0;
+    double sampTotal=sampleKeyspace(gMinLen,gMaxLen,gSamples,perLen,ciPct,!gJson);
+    if(g_tty && !gJson) fprintf(stderr,"\n");
+    double N=sampTotal; const char* src="Schaetzung";
+    double exact;
+    if(cacheGet(h,"exact",exact) && exact>0){
+        double sc = sampTotal>0 ? exact/sampTotal : 1.0;   // Verteilung auf exakte Summe skalieren
+        for(int d=0;d<11;d++) perLen[d]*=sc;
+        N=exact; src="exakt (Cache)"; ciPct=0;
+    } else {
+        cachePut(h,"est",sampTotal);
     }
     if(gJson){
         unordered_map<string,double> hs;
-        printf("{\"keyspace\":%.0f,\"min\":%d,\"max\":%d,\"device\":\"%s\",\"modes\":[",N,gMinLen,gMaxLen,device.c_str());
+        printf("{\"keyspace\":%.0f,\"ci_pct\":%.3f,\"min\":%d,\"max\":%d,\"device\":\"%s\",\"perlen\":{",
+               N,ciPct,gMinLen,gMaxLen,device.c_str());
+        bool pf=true;
+        for(int d=gMinLen; d<=gMaxLen; d++){ printf("%s\"%d\":%.0f",pf?"":",",d,perLen[d]); pf=false; }
+        printf("},\"modes\":[");
         bool first=true;
         for(int i=0;i<NMODES;i++){ if(!modeAllowed(MODES[i])) continue;
             if(!hs.count(MODES[i].hash)) hs[MODES[i].hash]=hsForHash(MODES[i].hash,MODES[i].code);
@@ -459,8 +474,18 @@ static int doEstimate(){
         }
         printf("]}\n"); return 0;
     }
-    fprintf(stderr,"[=] Keyspace: %s  (%s, Such-Hash %s)\n[*] H/s je Hash (Device=%s, aus Cache falls vorhanden) ...\n\n",
-            fmtCount(N).c_str(),src,h.c_str(),device.c_str());
+    char cib[32]={0}; if(ciPct>0) snprintf(cib,sizeof(cib)," +/- %.1f%%",ciPct);
+    fprintf(stderr,"[=] Keyspace: %s  (%s%s, Such-Hash %s)\n",
+            fmtCount(N).c_str(),src,cib,h.c_str());
+    // Verteilung je Laenge (ersetzt separaten 'sample'-Aufruf)
+    printf("\n%-6s %16s   %s\n","Laenge","Kandidaten","Anteil");
+    printf("--------------------------------------------------------------------\n");
+    for(int d=gMinLen; d<=gMaxLen; d++){
+        double frac = N>0 ? perLen[d]/N : 0;
+        printf(" %-5d %16s   %s %5.1f%%\n",d,fmtCount(perLen[d]).c_str(),barOf(frac,20).c_str(),100*frac);
+    }
+    fflush(stdout);
+    fprintf(stderr,"\n[*] H/s je Hash (Device=%s, aus Cache falls vorhanden) ...\n\n",device.c_str());
     printf("%-22s %-7s %18s  %-12s\n","Modus","Code","H/s","ETA");
     printf("--------------------------------------------------------------------\n");
     double tot=0; unordered_map<string,double> hs;
@@ -550,8 +575,29 @@ static int doRun(){
     vector<int> fwList; for(int i=0;i<Nw;i++) if(wordMinPos[i]<=1) fwList.push_back(i); // nur moegliche Startwoerter
     vector<int> modeIdx; for(int i=0;i<NMODES;i++) if(modeAllowed(MODES[i])) modeIdx.push_back(i);
 
-    int totalShards=(int)modeIdx.size()*(gMaxLen-gMinLen+1)*(int)fwList.size();
-    int shard=0,tested=0,deltas=0,skipped=0;
+    // Feinere Aufteilung bei langen Laengen: zweites Wort je Startwort vorfiltern
+    // (billige Checks; ungueltige Kombis wuerden sonst leere Bloecke erzeugen).
+    auto exclConflict=[&](int a,int b)->bool{
+        for(uint64_t g:exclusiveGroups) if(((g>>a)&1)&&((g>>b)&1)) return true; return false;
+    };
+    vector<vector<int>> swOf(Nw);
+    for(int fw:fwList){
+        for(int i=0;i<Nw;i++){
+            if(i==fw) continue;
+            if(wordMinPos[i]>2) continue;
+            if((forbiddenNext[fw]>>i)&1) continue;
+            if(exclConflict(fw,i)) continue;
+            swOf[fw].push_back(i);
+        }
+    }
+    auto sharded=[&](int len)->bool{ return len>=SHARD2_MINLEN; };
+
+    long totalShards=0;
+    for(int len=gMinLen; len<=gMaxLen; len++)
+        for(int fwIdx:fwList)
+            totalShards += (sharded(len) ? (long)swOf[fwIdx].size() : 1L);
+    totalShards *= (long)modeIdx.size();
+    long shard=0; int tested=0,deltas=0,skipped=0;
 
     if(!deviceCheck()){
         fprintf(stderr,"[-] hashcat findet KEIN Rechendevice (keine GPU sichtbar).\n");
@@ -561,80 +607,91 @@ static int doRun(){
     }
 
     fprintf(stderr,"[*] Resume aus %s (%zu Eintraege). Regel-Signatur: %s\n",STATE_FILE,g_state.size(),rhash.c_str());
-    fprintf(stderr,"[*] %zu Modi x Laenge %d-%d x %zu Startwoerter = %d Bloecke. Bereits Erledigtes wird uebersprungen.\n",
-            modeIdx.size(),gMinLen,gMaxLen,fwList.size(),totalShards);
-    fprintf(stderr,"    (Abbruch mit Strg+C jederzeit moeglich; fertige Bloecke bleiben gespeichert.)\n");
+    fprintf(stderr,"[*] %zu Modi x Laenge %d-%d = %ld Bloecke (lange Laengen >=%d zusaetzlich nach 2. Wort aufgeteilt).\n",
+            modeIdx.size(),gMinLen,gMaxLen,totalShards,SHARD2_MINLEN);
+    fprintf(stderr,"    Bereits Erledigtes wird uebersprungen. (Abbruch mit Strg+C jederzeit moeglich; fertige Bloecke bleiben gespeichert.)\n");
 
     for(int mi:modeIdx){
         const Mode&m=MODES[mi];
         for(int len=gMinLen; len<=gMaxLen; len++){
+            bool sh=sharded(len);
             for(int fwIdx:fwList){
-                shard++;
-                string fw=W[fwIdx].text;
-                bool full=false; const DoneRec* bestSub=nullptr; size_t bestSz=0;
-                for(const DoneRec&d:g_state){
-                    if(d.mode!=m.code||d.len!=len||d.fw!=fw||d.rhash!=rhash) continue;
-                    unordered_set<string> rs=csvToSet(d.wcsv);
-                    if(subsetOf(curSet,rs)){ full=true; break; }      // aktuelle Menge schon (als Teil) getestet
-                    if(subsetOf(rs,curSet)){ if(rs.size()>bestSz){ bestSz=rs.size(); bestSub=&d; } }
-                }
-                if(full){ skipped++; continue; }
-                uint64_t reqMask=0;
-                if(bestSub){ unordered_set<string> rs=csvToSet(bestSub->wcsv);
-                    for(int i=0;i<Nw;i++) if(!rs.count(W[i].text)) reqMask|=(1ull<<i);
-                    deltas++; } else tested++;
-
-                // Haeppchengroesse so, dass ein hashcat-Lauf ~gCheckpointSec dauert (aus H/s).
-                uint64_t chunk=UINT64_MAX;
-                if(gCheckpointSec>0){
-                    double hs=hsForHash(m.hash,m.code);
-                    if(hs>0){ chunk=(uint64_t)(hs*gCheckpointSec); if(chunk<100000) chunk=100000; }
-                }
-                // Zwischenstand fortsetzen?
-                uint64_t offset=0;
-                { auto it=g_part.find(partKey(m.code,len,fw,rhash,curCsv,reqMask)); if(it!=g_part.end()) offset=it->second; }
-
-                fprintf(stderr,"\n[Block %d/%d] %s XTS-%s (%s) -m %s | Laenge %d | Start '%s'%s\n",
-                        shard,totalShards,m.hash,m.size,m.cipher,m.code,len,W[fwIdx].text.c_str(),
-                        reqMask?"  [nur NEUE Kombinationen]":"");
-                if(chunk!=UINT64_MAX) fprintf(stderr,"    Checkpoint alle ~%ds (%s Kandidaten/Haeppchen)%s\n",
-                        gCheckpointSec,fmtCount((double)chunk).c_str(),
-                        offset?"":"");
-                if(offset>0) fprintf(stderr,"    Fortsetzung ab Kandidat %llu\n",(unsigned long long)offset);
-
-                char cmd[768];
-                snprintf(cmd,sizeof(cmd),".\\hashcat.exe -a 0 -m %s -D %d -w %d \"%s\" -o geknackt.txt --potfile-disable --status --status-timer=5 --hwmon-temp-abort=%d",
-                         m.code,devNum(),gWorkload,targetFile.c_str(),tempAbort);
-
-                bool blockDone=false;
-                while(!blockDone){
-                    remove("geknackt.txt");
-                    FILE*hc=POPEN(cmd,"wb"); if(!hc){ fprintf(stderr,"[-] hashcat-Start fehlgeschlagen.\n"); return 1; }
-                    Worker wk; wk.init(false,len,len); wk.out=hc; wk.requireMask=reqMask;
-                    wk.skipN=offset; wk.limitN=chunk; wk.firstWords.push_back(fwIdx);
-                    g_progress=0; g_branchDone=0; g_branchTotal=1; g_monitorRun=true;
-                    thread mon(monitor,"gen",false,5000);
-                    wk.gen(0); wk.flushOut(); fflush(hc);
-                    g_monitorRun=false; mon.join();
-                    int ec=exitCodeOf(PCLOSE(hc));
-                    FILE*res=fopen("geknackt.txt","rb");
-                    if(res){ fclose(res);
-                        fprintf(stderr,"\n[+] ERFOLG! %s + XTS-%s (%s), -m %s | Start '%s'\nPasswort (geknackt.txt):\n",
-                                m.hash,m.size,m.cipher,m.code,W[fwIdx].text.c_str());
-                        ifstream f("geknackt.txt"); string s; while(getline(f,s)) fprintf(stderr,"%s\n",s.c_str());
-                        return 0;
+                // Bei langen Laengen je zweitem Wort ein eigener Block, sonst ein Block (2. Wort frei).
+                const vector<int>& sws = swOf[fwIdx];
+                int nInner = sh ? (int)sws.size() : 1;
+                for(int si=0; si<nInner; si++){
+                    int swIdx = sh ? sws[si] : -1;
+                    shard++;
+                    // Block-Schluessel 'fw': bei 2-Wort-Aufteilung "wort1>wort2", sonst "wort1".
+                    string fw = (swIdx>=0) ? (W[fwIdx].text+">"+W[swIdx].text) : W[fwIdx].text;
+                    bool full=false; const DoneRec* bestSub=nullptr; size_t bestSz=0;
+                    for(const DoneRec&d:g_state){
+                        if(d.mode!=m.code||d.len!=len||d.fw!=fw||d.rhash!=rhash) continue;
+                        unordered_set<string> rs=csvToSet(d.wcsv);
+                        if(subsetOf(curSet,rs)){ full=true; break; }      // aktuelle Menge schon (als Teil) getestet
+                        if(subsetOf(rs,curSet)){ if(rs.size()>bestSz){ bestSz=rs.size(); bestSub=&d; } }
                     }
-                    // hashcat: 0=geknackt, 1=erschoepft(ok). Alles andere = Fehler (z.B. keine GPU).
-                    if(ec!=0 && ec!=1){
-                        fprintf(stderr,"\n[-] hashcat lief nicht korrekt (Exit %d) - vermutlich keine GPU / kein Rechendevice.\n",ec);
-                        fprintf(stderr,"    Block wird NICHT als erledigt markiert. Abbruch, damit nichts faelschlich uebersprungen wird.\n");
-                        return 2;
+                    if(full){ skipped++; continue; }
+                    uint64_t reqMask=0;
+                    if(bestSub){ unordered_set<string> rs=csvToSet(bestSub->wcsv);
+                        for(int i=0;i<Nw;i++) if(!rs.count(W[i].text)) reqMask|=(1ull<<i);
+                        deltas++; } else tested++;
+
+                    // Haeppchengroesse so, dass ein hashcat-Lauf ~gCheckpointSec dauert (aus H/s).
+                    uint64_t chunk=UINT64_MAX;
+                    if(gCheckpointSec>0){
+                        double hs=hsForHash(m.hash,m.code);
+                        if(hs>0){ chunk=(uint64_t)(hs*gCheckpointSec); if(chunk<100000) chunk=100000; }
                     }
-                    uint64_t emitted=wk.outCount; offset+=emitted;
-                    if(chunk==UINT64_MAX || emitted<chunk) blockDone=true;    // Block erschoepft
-                    else writePart(m.code,len,fw,rhash,curCsv,reqMask,offset); // Zwischenstand sichern (~alle gCheckpointSec)
+                    // Zwischenstand fortsetzen?
+                    uint64_t offset=0;
+                    { auto it=g_part.find(partKey(m.code,len,fw,rhash,curCsv,reqMask)); if(it!=g_part.end()) offset=it->second; }
+
+                    char startDesc[96];
+                    if(swIdx>=0) snprintf(startDesc,sizeof(startDesc),"%s > %s",W[fwIdx].text.c_str(),W[swIdx].text.c_str());
+                    else         snprintf(startDesc,sizeof(startDesc),"%s",W[fwIdx].text.c_str());
+
+                    fprintf(stderr,"\n[Block %ld/%ld] %s XTS-%s (%s) -m %s | Laenge %d | Start '%s'%s\n",
+                            shard,totalShards,m.hash,m.size,m.cipher,m.code,len,startDesc,
+                            reqMask?"  [nur NEUE Kombinationen]":"");
+                    if(chunk!=UINT64_MAX) fprintf(stderr,"    Checkpoint alle ~%ds (%s Kandidaten/Haeppchen)\n",
+                            gCheckpointSec,fmtCount((double)chunk).c_str());
+                    if(offset>0) fprintf(stderr,"    Fortsetzung ab Kandidat %llu\n",(unsigned long long)offset);
+
+                    char cmd[768];
+                    snprintf(cmd,sizeof(cmd),".\\hashcat.exe -a 0 -m %s -D %d -w %d \"%s\" -o geknackt.txt --potfile-disable --status --status-timer=5 --hwmon-temp-abort=%d",
+                             m.code,devNum(),gWorkload,targetFile.c_str(),tempAbort);
+
+                    bool blockDone=false;
+                    while(!blockDone){
+                        remove("geknackt.txt");
+                        FILE*hc=POPEN(cmd,"wb"); if(!hc){ fprintf(stderr,"[-] hashcat-Start fehlgeschlagen.\n"); return 1; }
+                        Worker wk; wk.init(false,len,len); wk.out=hc; wk.requireMask=reqMask;
+                        wk.skipN=offset; wk.limitN=chunk; wk.firstWords.push_back(fwIdx); wk.secondWord=swIdx;
+                        g_progress=0; g_branchDone=0; g_branchTotal=1; g_monitorRun=true;
+                        thread mon(monitor,"gen",false,5000);
+                        wk.gen(0); wk.flushOut(); fflush(hc);
+                        g_monitorRun=false; mon.join();
+                        int ec=exitCodeOf(PCLOSE(hc));
+                        FILE*res=fopen("geknackt.txt","rb");
+                        if(res){ fclose(res);
+                            fprintf(stderr,"\n[+] ERFOLG! %s + XTS-%s (%s), -m %s | Start '%s'\nPasswort (geknackt.txt):\n",
+                                    m.hash,m.size,m.cipher,m.code,startDesc);
+                            ifstream f("geknackt.txt"); string s; while(getline(f,s)) fprintf(stderr,"%s\n",s.c_str());
+                            return 0;
+                        }
+                        // hashcat: 0=geknackt, 1=erschoepft(ok). Alles andere = Fehler (z.B. keine GPU).
+                        if(ec!=0 && ec!=1){
+                            fprintf(stderr,"\n[-] hashcat lief nicht korrekt (Exit %d) - vermutlich keine GPU / kein Rechendevice.\n",ec);
+                            fprintf(stderr,"    Block wird NICHT als erledigt markiert. Abbruch, damit nichts faelschlich uebersprungen wird.\n");
+                            return 2;
+                        }
+                        uint64_t emitted=wk.outCount; offset+=emitted;
+                        if(chunk==UINT64_MAX || emitted<chunk) blockDone=true;    // Block erschoepft
+                        else writePart(m.code,len,fw,rhash,curCsv,reqMask,offset); // Zwischenstand sichern (~alle gCheckpointSec)
+                    }
+                    appendDone(m.code,len,fw,rhash,curCsv);   // Block erst nach vollstaendigem Durchlauf als erledigt markieren
                 }
-                appendDone(m.code,len,fw,rhash,curCsv);   // Block erst nach vollstaendigem Durchlauf als erledigt markieren
             }
         }
     }
@@ -762,11 +819,50 @@ static int doSample(int samples){
     return 0;
 }
 
+// ------------------------------- Header-Extraktion ------------------
+static string jsonEsc(const string&s){
+    string o; for(char c:s){ if(c=='\\'||c=='"'){ o+='\\'; o+=c; } else if(c=='\n'){ o+="\\n"; } else o+=c; } return o;
+}
+// Kopiert die ersten gHeaderBytes Bytes des Quell-Volumes nach targetFile.
+// VeraCrypt prueft nur die ersten 512 Byte (Standard) bzw. ab Offset 65536 (versteckt);
+// 512 KB decken beide ab. Fuer Datei-Container reicht ein einfaches fopen/fread.
+static int doHeader(){
+    if(gSrc.empty()){
+        fprintf(stderr,"[-] Keine Quelle. Nutze: vcrack header --src <volume|containerdatei> [--bytes N] [--target F]\n");
+        return 2;
+    }
+    FILE* in=fopen(gSrc.c_str(),"rb");
+    if(!in){ fprintf(stderr,"[-] Quelle nicht lesbar: %s\n",gSrc.c_str());
+        if(gJson) printf("{\"error\":\"quelle nicht lesbar\",\"src\":\"%s\"}\n",jsonEsc(gSrc).c_str());
+        return 2; }
+    FILE* out=fopen(targetFile.c_str(),"wb");
+    if(!out){ fprintf(stderr,"[-] Zieldatei nicht schreibbar: %s\n",targetFile.c_str()); fclose(in);
+        if(gJson) printf("{\"error\":\"ziel nicht schreibbar\",\"target\":\"%s\"}\n",jsonEsc(targetFile).c_str());
+        return 2; }
+    vector<unsigned char> buf((size_t)(gHeaderBytes>0?gHeaderBytes:512));
+    size_t got=fread(buf.data(),1,buf.size(),in); fclose(in);
+    size_t wr=got?fwrite(buf.data(),1,got,out):0; fclose(out);
+    if(got==0 || wr!=got){ fprintf(stderr,"[-] Lesen/Schreiben fehlgeschlagen (gelesen %zu, geschrieben %zu).\n",got,wr);
+        if(gJson) printf("{\"error\":\"io\",\"read\":%zu,\"written\":%zu}\n",got,wr);
+        return 1; }
+    if(gJson){
+        printf("{\"ok\":true,\"src\":\"%s\",\"target\":\"%s\",\"bytes\":%zu}\n",
+               jsonEsc(gSrc).c_str(),jsonEsc(targetFile).c_str(),got);
+    } else {
+        fprintf(stderr,"[+] %zu Bytes aus '%s' extrahiert -> '%s'.\n",got,gSrc.c_str(),targetFile.c_str());
+        if(got<(size_t)gHeaderBytes) fprintf(stderr,"    (Quelle kleiner als angefordert - vollstaendig kopiert.)\n");
+        fprintf(stderr,"    Damit kann 'vcrack run'/'estimate' arbeiten. Original bleibt unveraendert.\n");
+    }
+    return 0;
+}
+
 // ------------------------------- main --------------------------------
 static void usage(){ fprintf(stderr,
-    "vcrack <rules|gen|count|sample|bench|estimate|run> [optionen]\n"
+    "vcrack <rules|gen|count|sample|bench|estimate|run|header> [optionen]\n"
     "  --rules F --words F --target F --min N --max N --skip N --limit N\n"
     "  --hash H --size S --device gpu|cpu|both --temp N --samples N --rebench --checkpoint SEK --workload 1..4\n"
+    "  header --src <volume> [--bytes N] [--target F] = Header aus VeraCrypt-Volume extrahieren (Standard 512 KB)\n"
+    "  estimate = Keyspace + Verteilung je Laenge + H/s je Hash + ETA in einem Schritt (ersetzt sample+bench)\n"
     "  --checkpoint SEK = Zwischenspeicherung des run-Fortschritts spaetestens alle SEK Sekunden (Standard 300, 0=aus)\n"
     "  sample/estimate = schnelle Keyspace-Schaetzung mit +/- Fehlerspanne (DOS-Dashboard)\n"
     "  count = exakt (langsamer); Ergebnis teilen sich count/sample/estimate per Such-Hash-Cache\n"
@@ -793,9 +889,13 @@ int main(int argc,char**argv){
         else if(a=="--rebench") gRebench=true;
         else if(a=="--checkpoint") gCheckpointSec=atoi(val("300").c_str());
         else if(a=="--workload") gWorkload=atoi(val("3").c_str());
+        else if(a=="--src") gSrc=val("");
+        else if(a=="--bytes") gHeaderBytes=atol(val("524288").c_str());
         else if(a=="--json") gJson=true;
         else fprintf(stderr,"[!] Unbekannte Option: %s\n",a.c_str());
     }
+    if(cmd=="header") return doHeader();   // braucht weder Wortliste noch Regeln
+
     if(!loadWords(wordsFile)){ fprintf(stderr,"[-] Wortliste nicht lesbar: %s\n",wordsFile.c_str()); return 2; }
     Nw=(int)W.size(); if(Nw==0){ fprintf(stderr,"[-] Wortliste leer.\n"); return 2; }
     if(Nw>64){ fprintf(stderr,"[-] Mehr als 64 Woerter nicht unterstuetzt (Masken).\n"); return 2; }
@@ -815,5 +915,6 @@ int main(int argc,char**argv){
     if(cmd=="bench")    return doBench();
     if(cmd=="estimate") return doEstimate();
     if(cmd=="run")      return doRun();
+    if(cmd=="header")   return doHeader();   // (wird oben bereits abgefangen)
     usage(); return 2;
 }

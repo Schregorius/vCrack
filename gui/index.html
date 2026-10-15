@@ -121,9 +121,25 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
         <div class="field"><label>Laenge max</label><input type="number" id="c_max" value="10" min="1" max="30"></div>
         <div class="field"><label>Rechenwerk</label><select id="c_dev"><option value="gpu">GPU</option><option value="both">GPU+CPU</option><option value="cpu">CPU</option></select></div>
         <div class="field"><label>Checkpoint (Sek)</label><input type="number" id="c_cp" value="300" min="0" step="30"></div>
+        <div class="field" style="min-width:220px"><label>Ziel (Header)</label>
+          <div style="display:flex;gap:6px">
+            <select id="c_target" style="flex:1"></select>
+            <button class="btn gray iconbtn" id="targetRefresh" title="Ziele neu einlesen" style="padding:0 10px">⟳</button>
+          </div></div>
         <div class="field"><button class="btn" id="startBtn">▶ Start</button></div>
         <div class="field"><button class="btn red" id="stopBtn" disabled>■ Stop</button></div>
       </div>
+    </div>
+    <div class="card">
+      <h2>Header auslesen</h2>
+      <div class="hint" style="margin-bottom:10px">Kopiert die ersten Bytes eines VeraCrypt-Volumes/Containers in eine Header-Datei, die vcrack dann testet. Das Original bleibt unveraendert.</div>
+      <div class="row">
+        <div class="field" style="flex:2;min-width:280px"><label>Quelle (Volume/Containerdatei)</label><input type="text" id="h_src" placeholder="z.B. E:\\meine_videos.hc oder \\\\.\\F:"></div>
+        <div class="field"><label>Bytes</label><input type="number" id="h_bytes" value="524288" min="512" step="512"></div>
+        <div class="field" style="flex:1.5;min-width:200px"><label>Zieldatei</label><input type="text" id="h_target" value="Fvc_header.tc"></div>
+        <div class="field"><button class="btn" id="h_go">Auslesen</button></div>
+      </div>
+      <div class="hint" id="h_status" style="margin-top:8px"></div>
     </div>
     <div class="card">
       <h2>Live-Status</h2>
@@ -131,6 +147,9 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
         <div class="tile"><div class="k">Geschwindigkeit</div><div class="v" id="t_speed">–</div></div>
         <div class="tile"><div class="k">GPU-Temperatur</div><div class="v" id="t_temp">–</div></div>
         <div class="tile"><div class="k">GPU-Auslastung</div><div class="v" id="t_util">–</div></div>
+        <div class="tile"><div class="k">Luefter</div><div class="v" id="t_fan">–</div></div>
+        <div class="tile"><div class="k">GPU-Takt</div><div class="v" id="t_core">–</div></div>
+        <div class="tile"><div class="k">Block-Restzeit</div><div class="v" id="t_eta">–</div></div>
         <div class="tile"><div class="k">Laufzeit</div><div class="v" id="t_time">–</div></div>
       </div>
       <div class="prog-label"><span id="blockDesc">kein Block aktiv</span><span id="blockPct"></span></div>
@@ -211,10 +230,36 @@ try{const t=localStorage.getItem("vc_theme"); if(t)document.documentElement.setA
 
 // Cockpit run
 $("#startBtn").onclick=async()=>{
-  const cfg={hash:$("#c_hash").value,size:$("#c_size").value,min:+$("#c_min").value,max:+$("#c_max").value,device:$("#c_dev").value,checkpoint:+$("#c_cp").value};
+  const cfg={hash:$("#c_hash").value,size:$("#c_size").value,min:+$("#c_min").value,max:+$("#c_max").value,device:$("#c_dev").value,target:$("#c_target").value,checkpoint:+$("#c_cp").value};
   await api("/api/run","POST",{action:"start",cfg}); poll();
 };
 $("#stopBtn").onclick=async()=>{ await api("/api/run","POST",{action:"stop"}); poll(); };
+
+// Ziel-Selektor (vorhandene Header im Ordner)
+async function loadTargets(){
+  try{
+    const r=await api("/api/targets"); const sel=$("#c_target"); const prev=sel.value;
+    sel.innerHTML="";
+    const ts=(r.targets||[]);
+    if(!ts.length){ const o=document.createElement("option"); o.value="Fvc_header.tc"; o.textContent="Fvc_header.tc (nicht gefunden)"; sel.appendChild(o); }
+    for(const t of ts){ const o=document.createElement("option"); o.value=t.name; o.textContent=`${t.name} (${(t.size/1024).toFixed(0)} KB)`; sel.appendChild(o); }
+    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+  }catch(e){}
+}
+$("#targetRefresh").onclick=loadTargets;
+
+// Header auslesen
+$("#h_go").onclick=async()=>{
+  const src=$("#h_src").value.trim();
+  if(!src){ $("#h_status").textContent="Bitte eine Quelle angeben."; return; }
+  $("#h_go").disabled=true; $("#h_status").textContent="lese Header …";
+  try{
+    const r=await api("/api/header","POST",{src,bytes:+$("#h_bytes").value,target:$("#h_target").value.trim()||"Fvc_header.tc"});
+    if(r.ok){ $("#h_status").innerHTML=`✓ ${fmt(r.bytes)} Bytes -> <b>${r.target}</b> extrahiert.`; await loadTargets(); $("#c_target").value=r.target; }
+    else { $("#h_status").textContent="Fehler: "+(r.error||"unbekannt"); }
+  }catch(e){ $("#h_status").textContent="Fehler: "+e; }
+  $("#h_go").disabled=false;
+};
 
 async function poll(){
   let s; try{ s=await api("/api/status"); }catch(e){ return; }
@@ -224,6 +269,10 @@ async function poll(){
   $("#t_speed").innerHTML = s.speed? fmt(s.speed)+" <small>H/s</small>" : "–";
   $("#t_temp").innerHTML  = s.temp?  s.temp+" <small>°C</small>" : "–";
   $("#t_util").innerHTML  = s.util?  s.util+" <small>%</small>" : "–";
+  $("#t_fan").innerHTML   = s.fan?   s.fan+" <small>%</small>" : "–";
+  $("#t_core").innerHTML  = s.core?  (s.core/1000).toFixed(2)+" <small>GHz</small>" : "–";
+  const etaSec = (s.speed>0 && s.prog_max>s.prog_cur)? (s.prog_max-s.prog_cur)/s.speed : -1;
+  $("#t_eta").textContent = etaSec>=0? eta(etaSec) : "–";
   $("#t_time").textContent= s.elapsed? hms(s.elapsed):"–";
   $("#blockDesc").textContent = s.block_desc || (s.running?"starte…":"kein Block aktiv");
   const bp = s.prog_max? (100*s.prog_cur/s.prog_max):0;
@@ -241,31 +290,32 @@ setInterval(poll, 1500); poll();
 let statsLoaded=false, statsBusy=false;
 function renderKs(r){
   if(r.error){ $("#ksResult").innerHTML="<div class='hint'>Fehler: "+r.error+"</div>"; return; }
-  let rows=""; for(const d of Object.keys(r.perlen||{})){ const v=r.perlen[d], frac=r.total? v/r.total:0;
+  const total=+r.keyspace||0;
+  let rows=""; for(const d of Object.keys(r.perlen||{})){ const v=r.perlen[d], frac=total? v/total:0;
     rows+=`<div class="ksrow"><span class="lab">Laenge ${d}</span><span class="num">${fmt(v)}</span>
       <span class="kbar"><i style="width:${(frac*100).toFixed(1)}%"></i></span><span class="pct">${(frac*100).toFixed(1)}%</span></div>`; }
-  $("#ksResult").innerHTML=`<div class="big">${fmt(r.total)} Kandidaten <small style="font-size:14px;color:var(--sub)">± ${(r.ci_pct||0).toFixed(1)}%</small></div>${rows}`;
+  const ci=(+r.ci_pct||0); const cistr = ci>0? ` <small style="font-size:14px;color:var(--sub)">± ${ci.toFixed(1)}%</small>`:"";
+  $("#ksResult").innerHTML=`<div class="big">${fmt(total)} Kandidaten${cistr}</div>${rows||"<div class='hint'>—</div>"}`;
 }
 function renderEt(r){
   if(r.error){ $("#etResult").innerHTML="<div class='hint'>Fehler: "+r.error+"</div>"; return; }
   let rows="";
   for(const m of (r.modes||[])){ rows+=`<tr><td>${m.hash} / XTS-${m.size}</td><td>${m.code}</td><td>${m.hs>0?fmt(m.hs)+" H/s":"?"}</td><td>${eta(m.eta_sec)}</td></tr>`; }
-  $("#etResult").innerHTML=`<div class="hint">Keyspace: ${fmt(r.keyspace)}</div>
+  $("#etResult").innerHTML=`<div class="hint">Keyspace: ${fmt(+r.keyspace||0)}</div>
     <table><thead><tr><th>Modus</th><th>Code</th><th>H/s</th><th>Laufzeit</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function runStats(){
   if(statsBusy) return; statsBusy=true;
   const ref=$("#statsRefresh"); ref.classList.add("spin");
-  const cfg=()=>({min:+$("#c_min").value,max:+$("#c_max").value});
   try{
-    $("#statsStatus").textContent="1/2 · Keyspace wird geschaetzt …";
+    $("#statsStatus").textContent="Keyspace schaetzen, H/s messen & Laufzeiten berechnen (braucht die GPU) …";
     $("#ksResult").innerHTML="<div class='hint'>rechne…</div>";
-    renderKs(await api("/api/keyspace","POST",cfg()));
-    $("#statsStatus").textContent="2/2 · H/s messen & Laufzeiten berechnen (braucht die GPU) …";
     $("#etResult").innerHTML="<div class='hint'>rechne…</div>";
-    renderEt(await api("/api/estimate","POST",{...cfg(),hash:$("#c_hash").value,size:$("#c_size").value,device:$("#c_dev").value}));
-    $("#statsStatus").textContent="Aktuell. ⟳ zum Neuberechnen.";
-    statsLoaded=true;
+    // Ein einziger Aufruf liefert Keyspace, Verteilung je Laenge, H/s und ETA.
+    const r=await api("/api/estimate","POST",{min:+$("#c_min").value,max:+$("#c_max").value,hash:$("#c_hash").value,size:$("#c_size").value,device:$("#c_dev").value});
+    renderKs(r); renderEt(r);
+    $("#statsStatus").textContent = r.error? ("Fehler: "+r.error) : "Aktuell. ⟳ zum Neuberechnen.";
+    statsLoaded=!r.error;
   }catch(e){ $("#statsStatus").textContent="Fehler: "+e; }
   ref.classList.remove("spin"); statsBusy=false;
 }
@@ -278,7 +328,7 @@ $("#rulesReload").onclick=loadRules;
 $("#rulesSave").onclick=async()=>{ await api("/api/rules","POST",$("#rulesText").value); $("#rulesHint").textContent="gespeichert ✓"; setTimeout(()=>$("#rulesHint").textContent="",2000); };
 $("#wordsReload").onclick=loadWords;
 $("#wordsSave").onclick=async()=>{ await api("/api/words","POST",$("#wordsText").value); loadWords(); };
-loadRules(); loadWords();
+loadRules(); loadWords(); loadTargets();
 </script>
 </body>
 </html>

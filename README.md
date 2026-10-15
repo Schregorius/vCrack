@@ -1,4 +1,4 @@
-# vcrack 1.0.0
+# vcrack 1.0.1
 
 **English** | [Deutsch](README-DE.md)
 
@@ -21,8 +21,8 @@ search space from "infinite" to "feasible".
 
 - **Native C++ generator** (no runtime required), streams candidates directly into hashcat (`-a 0` stdin mode) — nothing is written to disk.
 - **Rule system** (`rules.txt`): length, position rules, forbidden adjacencies, exclusions, etc. — loaded at runtime, **no recompile** when rules change.
-- **Keyspace estimation via Monte-Carlo** with an error margin (±%), in under a second, incl. a DOS-style dashboard and per-length distribution.
-- **Runtime estimation** per hashcat mode (measures H/s, computes ETA).
+- **All-in-one `estimate`**: Monte-Carlo keyspace with an error margin (±%) in under a second, the per-length distribution, the measured H/s per hash, and the ETA per mode — one command (replaces separate `sample` + `bench` steps; both still exist as low-level commands).
+- **Header extraction** (`vcrack header --src <volume>`): pulls the VeraCrypt header out of a volume/container into the target file; also available in the GUI.
 - **Resume & checkpoints**: progress is saved per block; within a block at least every few minutes (`--checkpoint`). Aborting never loses more than that interval.
 - **Smart resume on changes**: add a word → only the *new* combinations are tested. Remove a word / tighten a rule → skipped. Nothing is computed twice.
 - **Search-hash cache**: `count`, `sample` and `estimate` share results as long as words/rules/lengths are unchanged.
@@ -52,9 +52,16 @@ vcrack-gui.bat      <- GUI launcher
 gui\                <- GUI server + page
 ```
 
-**Extracting the header** (the first 512 KB of the VeraCrypt volume are enough;
-only the first 512 bytes are checked). See the hashcat docs on the VeraCrypt modes
-for details on obtaining the header.
+**Extracting the header**: vcrack can do this for you —
+
+```
+vcrack header --src E:\my_videos.hc --target Fvc_header.tc
+```
+
+It copies the first 512 KB of the source (volume file or container) into the
+target file; only the first 512 bytes are actually checked, and 512 KB also
+covers hidden-volume headers. The GUI has the same thing under **Cockpit →
+Extract header**. The original is never modified.
 
 ## Setup / Build
 
@@ -73,13 +80,18 @@ and checks hashcat / GPU / Python. For a plain rebuild later, use `build.bat`
 
 ```
 vcrack rules       show active rules (from rules.txt)
-vcrack sample      quickly estimate the keyspace (Monte-Carlo, +/- margin, dashboard)
+vcrack estimate    all-in-one: keyspace + per-length distribution + H/s per hash + ETA
 vcrack count       count the keyspace exactly (slower, multi-core, cached)
-vcrack estimate    keyspace x H/s -> runtime table per mode
-vcrack bench       measure and cache H/s per hash
+vcrack sample      low-level: keyspace estimate only (Monte-Carlo, +/- margin)
+vcrack bench       low-level: measure and cache H/s per hash
+vcrack header      extract the header from a VeraCrypt volume into the target file
 vcrack gen         candidates to stdout (for testing/piping)
-vcrack run         attack: modes x length x first-word, with resume
+vcrack run         attack: modes x length x first-word(s), with resume
 ```
+
+`estimate` is the one command you normally need before a run — it combines what
+`sample` and `bench` used to do and prints the keyspace, how it splits across
+lengths, the measured H/s per hash, and the resulting runtime per mode.
 
 ### Options
 
@@ -97,14 +109,15 @@ vcrack run         attack: modes x length x first-word, with resume
 | `--temp N` | GPU emergency abort at N °C (default 90) |
 | `--samples N` | samples for sample/estimate (default 300000) |
 | `--rebench` | re-measure H/s instead of using the cache |
+| `--src F` | source volume/container for `header` |
+| `--bytes N` | bytes to extract for `header` (default 524288 = 512 KB) |
 | `--json` | machine-readable output (for the GUI) |
 
 ### Typical workflow
 
 ```
 vcrack rules
-vcrack bench
-vcrack estimate --max 8      # look at realistic runtimes
+vcrack estimate --max 8      # keyspace + distribution + H/s + realistic runtimes
 vcrack run --hash SHA-512 --size 512 --max 8
 ```
 
@@ -131,7 +144,9 @@ adapt it to your words. Maximum **64 words** in the list (internal bitmasks).
 
 ## Resume / checkpoints
 
-- Run order: per **mode** → per **length** → per **first word** = one block.
+- Run order: per **mode** → per **length** → per **first word** = one block. For long
+  lengths (>= 9) each block is split further by the **second word**, so progress on the
+  huge length-9/10 passes advances in many small, resumable steps.
 - Each finished block is stored as a `DONE` line in `vcrack_state.txt`.
 - Within a block, `--checkpoint` stores the offset as a `PART` line.
 - Running `vcrack run` again resumes automatically; finished work is skipped.
@@ -150,8 +165,10 @@ vcrack-gui.bat
 ```
 Starts the local server (`gui\gui_server.py`, Python standard library only) and
 opens a **standalone window** (Chrome/Edge in app mode). Tabs: **Cockpit**
-(start/stop, live status), **Statistics** (keyspace + runtime), **Rules**,
-**Word list**. Keep the console window open — closing it stops the server.
+(target selector, header extraction, start/stop, live tiles — speed, temp, util,
+fan, GPU clock, block ETA — and progress bars), **Statistics** (one click →
+keyspace + per-length distribution + runtimes), **Rules**, **Word list**. Keep
+the console window open — closing it stops the server.
 
 ---
 
