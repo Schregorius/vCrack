@@ -1,36 +1,36 @@
 # =====================================================================
-# vcrack Regeldatei (Beispiel)  -  rules.example.txt
+# vcrack rule file (example)  -  rules.example.txt
 #
-# Nach rules.txt kopieren und an die EIGENEN Woerter (list.txt) anpassen.
-# Zeilen mit # sind Kommentare. Gross-/Kleinschreibung der Regel-Woerter egal.
-# Aenderungen werden zur Laufzeit geladen - kein Neukompilieren noetig.
+# Copy to rules.txt and adapt to YOUR words (list.txt).
+# Lines starting with # are comments. Rule words are case-insensitive.
+# Changes are loaded at runtime - no recompile needed.
 #
-# Regeltypen:
-#   laenge A B                      Kandidat besteht aus A..B Woertern
-#   abpos N : w1 w2 ...             diese Woerter nur AB Position N
-#   nachbarn-verboten L.. -> R..    Uebergang verbieten (links L -> rechts R)
-#   exklusiv w1 w2 ...              hoechstens EINES dieser Woerter pro Kandidat
-#   nicht-am-ende N : w1 ...        diese Woerter nicht in den letzten N Positionen
-#   max-ein-ever                    spezielle "ever"-Kombinationslogik
+# Rule types (English keywords; German aliases in brackets still work):
+#   length A B                      candidate consists of A..B words        [laenge]
+#   frompos N : w1 w2 ...           these words only FROM position N         [abpos]
+#   forbid-adjacent L.. -> R..      forbid a transition (left L -> right R)  [nachbarn-verboten]
+#   exclusive w1 w2 ...             at most ONE of these words per candidate [exklusiv]
+#   not-at-end N : w1 ...           not within the last N positions          [nicht-am-ende]
+#   max-one-ever                    special "ever" combination logic         [max-ein-ever]
 #
-# Die folgenden Woerter (word1..) sind nur Platzhalter - ersetze sie durch
-# die Woerter aus deiner list.txt.
+# The words below (word1..) are placeholders - replace them with the
+# words from your list.txt.
 # =====================================================================
 
-laenge 7 10
+length 7 10
 
-# Zahl/Sonderzeichen erst spaeter im Satz
-abpos 4 : 1 !
-abpos 3 : for
+# number / special char only later in the sentence
+frompos 4 : 1 !
+frompos 3 : for
 
-# Beispiel: nach bestimmten Woertern darf word1 nicht folgen
-nachbarn-verboten  word2 word3 it me  ->  word1
+# example: word1 may not follow these words
+forbid-adjacent  word2 word3 it me  ->  word1
 
-# nur eine Schreibweise pro Kandidat zulassen
-exklusiv without withOut
+# allow only one spelling per candidate
+exclusive without withOut
 
-# bestimmte Woerter nicht ganz am Ende
-nicht-am-ende 3 : word1 word4
+# keep certain words away from the very end
+not-at-end 3 : word1 word4
 
-# hoechstens ein "ever"-Konzept pro Kandidat
-max-ein-ever
+# at most one "ever" concept per candidate
+max-one-ever

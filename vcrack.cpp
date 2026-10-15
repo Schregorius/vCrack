@@ -150,17 +150,18 @@ static bool loadRulesFile(const string&file){
         size_t h=line.find('#'); if(h!=string::npos) line=line.substr(0,h);
         stringstream ss(line); vector<string> tok; string t; while(ss>>t) tok.push_back(t);
         if(tok.empty()) continue; string kw=lower(tok[0]); Rule r;
-        if(kw=="laenge" && tok.size()>=3){ r.type="laenge"; r.a=atoi(tok[1].c_str()); r.b=atoi(tok[2].c_str()); }
-        else if(kw=="abpos" && tok.size()>=2){ r.type="abpos"; r.a=atoi(tok[1].c_str());
+        // English keywords are primary; German keywords kept as aliases (backward compatible).
+        if((kw=="length"||kw=="laenge") && tok.size()>=3){ r.type="laenge"; r.a=atoi(tok[1].c_str()); r.b=atoi(tok[2].c_str()); }
+        else if((kw=="frompos"||kw=="abpos") && tok.size()>=2){ r.type="abpos"; r.a=atoi(tok[1].c_str());
             for(size_t i=2;i<tok.size();i++){ if(tok[i]==":") continue; r.left.push_back(tok[i]); } }
-        else if(kw=="nachbarn-verboten"){ r.type="nachbarn"; bool right=false;
+        else if(kw=="forbid-adjacent"||kw=="nachbarn-verboten"){ r.type="nachbarn"; bool right=false;
             for(size_t i=1;i<tok.size();i++){ if(tok[i]=="->"){ right=true; continue; }
                 if(right) r.right.push_back(tok[i]); else r.left.push_back(tok[i]); } }
-        else if(kw=="exklusiv"){ r.type="exklusiv"; for(size_t i=1;i<tok.size();i++) r.left.push_back(tok[i]); }
-        else if(kw=="nicht-am-ende" && tok.size()>=2){ r.type="nicht-am-ende"; r.a=atoi(tok[1].c_str());
+        else if(kw=="exclusive"||kw=="exklusiv"){ r.type="exklusiv"; for(size_t i=1;i<tok.size();i++) r.left.push_back(tok[i]); }
+        else if((kw=="not-at-end"||kw=="nicht-am-ende") && tok.size()>=2){ r.type="nicht-am-ende"; r.a=atoi(tok[1].c_str());
             for(size_t i=2;i<tok.size();i++){ if(tok[i]==":") continue; r.left.push_back(tok[i]); } }
-        else if(kw=="max-ein-ever"){ r.type="max-ein-ever"; }
-        else { fprintf(stderr,"[!] Unbekannte Regel: %s\n",tok[0].c_str()); continue; }
+        else if(kw=="max-one-ever"||kw=="max-ein-ever"){ r.type="max-ein-ever"; }
+        else { fprintf(stderr,"[!] Unknown rule: %s\n",tok[0].c_str()); continue; }
         RULES.push_back(r);
     }
     return true;
@@ -182,14 +183,14 @@ static void installDefaultRules(){
     R({"max-ein-ever",0,0,{},{}});
 }
 static void printRules(bool fromFile){
-    fprintf(stderr,"[*] Aktive Regeln (%s):\n\n", fromFile? "aus rules.txt":"eingebauter Standard");
+    fprintf(stderr,"[*] Active rules (%s):\n\n", fromFile? "from rules.txt":"built-in default");
     for(const Rule&r:RULES){
-        if(r.type=="laenge")        printf("  Laenge: %d bis %d Woerter\n",r.a,r.b);
-        else if(r.type=="abpos")    printf("  Nur ab Position %d: %s\n",r.a,joinTok(r.left).c_str());
-        else if(r.type=="nachbarn") printf("  Verboten nebeneinander: {%s} -> {%s}\n",joinTok(r.left).c_str(),joinTok(r.right).c_str());
-        else if(r.type=="exklusiv") printf("  Hoechstens eines von: %s\n",joinTok(r.left).c_str());
-        else if(r.type=="nicht-am-ende") printf("  Nicht in den letzten %d Woertern: %s\n",r.a,joinTok(r.left).c_str());
-        else if(r.type=="max-ein-ever")  printf("  Hoechstens ein 'ever'-Konzept\n");
+        if(r.type=="laenge")        printf("  length: %d to %d words\n",r.a,r.b);
+        else if(r.type=="abpos")    printf("  only from position %d: %s\n",r.a,joinTok(r.left).c_str());
+        else if(r.type=="nachbarn") printf("  forbidden adjacent: {%s} -> {%s}\n",joinTok(r.left).c_str(),joinTok(r.right).c_str());
+        else if(r.type=="exklusiv") printf("  at most one of: %s\n",joinTok(r.left).c_str());
+        else if(r.type=="nicht-am-ende") printf("  not in the last %d words: %s\n",r.a,joinTok(r.left).c_str());
+        else if(r.type=="max-ein-ever")  printf("  at most one 'ever' concept\n");
     }
 }
 
