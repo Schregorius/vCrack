@@ -56,13 +56,16 @@ gui\                <- GUI server + page
 only the first 512 bytes are checked). See the hashcat docs on the VeraCrypt modes
 for details on obtaining the header.
 
-## Build
+## Setup / Build
+
+First time, just run:
 
 ```
-build.bat
+install.bat
 ```
-Produces `vcrack.exe`. (Alternatively, in the "x64 Native Tools Command Prompt":
-`cl /nologo /O2 /EHsc /std:c++17 /Fe:vcrack.exe vcrack.cpp`)
+It builds `vcrack.exe`, creates `rules.txt` and `list.txt` from the template if missing,
+and checks hashcat / GPU / Python. For a plain rebuild later, use `build.bat`
+(or, in the "x64 Native Tools Command Prompt": `cl /nologo /O2 /EHsc /std:c++17 /Fe:vcrack.exe vcrack.cpp`).
 
 ---
 

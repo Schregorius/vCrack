@@ -87,7 +87,20 @@ def parse_log():
     if d["found"]:
         try: d["password"] = read_text("geknackt.txt").strip()
         except Exception: pass
-    d["tail"] = "".join(tail[-40:])
+    # Nur den NEUESTEN hashcat-Statusblock zeigen (von letztem "Session" bis "Hardware.Mon"),
+    # davor die aktuelle [Block ..]-Zeile. Sonst stuenden mehrere Bloecke gleichzeitig im Log.
+    last_sess = None; last_block = ""
+    for i, ln in enumerate(tail):
+        if ln.lstrip().startswith("[Block "): last_block = ln.strip()
+        if ln.startswith("Session"): last_sess = i
+    if last_sess is not None:
+        seg = []
+        for ln in tail[last_sess:]:
+            seg.append(ln)
+            if ln.lstrip().startswith("Hardware.Mon"): break
+        d["tail"] = (last_block + "\n\n" if last_block else "") + "".join(seg)
+    else:
+        d["tail"] = "".join(tail[-20:])
     return d
 
 def status():

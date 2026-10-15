@@ -56,13 +56,16 @@ gui\                <- GUI-Server + Seite
 ersten 512 Byte werden geprüft). Details zur Header-Gewinnung siehe hashcat-Doku
 zu den VeraCrypt-Modi.
 
-## Bauen
+## Einrichten / Bauen
+
+Beim ersten Mal einfach:
 
 ```
-build.bat
+install.bat
 ```
-Erzeugt `vcrack.exe`. (Alternativ in der „x64 Native Tools Command Prompt":
-`cl /nologo /O2 /EHsc /std:c++17 /Fe:vcrack.exe vcrack.cpp`)
+Baut `vcrack.exe`, legt `rules.txt` und `list.txt` aus der Vorlage an (falls nicht vorhanden)
+und prüft hashcat / GPU / Python. Für einen reinen Neu-Build später `build.bat`
+(oder in der „x64 Native Tools Command Prompt": `cl /nologo /O2 /EHsc /std:c++17 /Fe:vcrack.exe vcrack.cpp`).
 
 ---
 
