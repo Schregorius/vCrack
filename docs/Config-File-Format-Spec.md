@@ -28,7 +28,7 @@ item per line inside a dedicated section.
 ```
 version     = 1              # vcrack.config format version
 app_version = 1.1.0          # vcrack version last run
-app_path    = C:\hashcat-7.1.2
+app_path    = E:\vcrack
 label_hash  = 9f2a1c…        # label-hash of the running UI (see Text-Variable spec)
 ```
 

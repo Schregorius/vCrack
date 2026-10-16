@@ -2,8 +2,8 @@
 
 Per-target data file for vcrack. One `.vc` file holds everything tied to a
 single encrypted target: where its header is, the per-target settings, the
-word list, the sentence/word rules, statistics, and a pointer to its attack
-progress.
+word list, the sentence/word rules, statistics, and its attack
+progress (embedded).
 
 > Issue reference: "neu: .vc datei". This spec is the deliverable requested
 > there ("Erstelle dazu eine VC-Datei-Format-Spezifikation.md").
@@ -118,15 +118,19 @@ found         = 0            # 1 once the password is recovered
 ```
 
 ### `[progress]`
-Pointer to the engine's state file (decision #4 — progress is *referenced*,
-not embedded, so the proven resume machinery is untouched):
+The attack progress is **embedded** in the `.vc` (decision A1). The block holds
+the engine's resume lines (`DONE|…` / `PART|…`, see `README` → Resume), one per
+line, verbatim:
 ```
-state_file = meine_videos.hc-4294967296.state
+[progress]
+DONE|13721|7|Patricia|<rhash>|<wcsv>|<rules>
+DONE|13721|8|Love|<rhash>|<wcsv>|<rules>
+PART|13721|9|…|<offset>
 ```
-The `.state` file keeps the existing `DONE|…` / `PART|…` line format
-(see `README` → Resume). If issue A1 is later decided the other way, this
-section gains an inline `progress_data` block instead and the server
-round-trips it to/from the engine.
+At run time the server exports these lines to the format the engine reads and
+re-imports the engine's updated lines back into the `.vc` afterwards, so a single
+`.vc` is the complete, portable record of a target (settings + words + rules +
+stats + progress). The per-candidate cover-filter logic itself is unchanged.
 
 ## 4. Word-list index rules (from issue "Wortliste")
 
@@ -152,7 +156,7 @@ If a target has no `.vc` yet but legacy `list.txt` / `rules.txt` /
 `vcrack_state.txt` exist, a one-time `migrate` builds the first `.vc`:
 `[words]` from `list.txt` (indices assigned in order, `used=1` for any word
 already covered by a DONE line), `[rules]` from `rules.txt`, `[progress]`
-pointing at the existing state file. Nothing is deleted; the legacy files
+seeded with the existing state file's `DONE`/`PART` lines. Nothing is deleted; the legacy files
 stay as a backup.
 
 ## 6. Header file

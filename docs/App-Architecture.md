@@ -58,7 +58,7 @@ Python layer, which is easy to change and does not need a C++ rebuild.
 | `<name>.<ext>_header.hf` | per target | engine (`header`) | binary (header bytes) | VC spec §Header |
 | `text_variable_specs.csv` | app (ships) | build/dev | CSV `;` | Text-Variable spec |
 | `<Language>.lng` | app (ships) | translators | text | Language spec |
-| `*.state` (progress) | per target | engine | existing DONE/PART lines | VC spec §Progress |
+| progress (`DONE`/`PART` lines) | per target | engine ↔ server | embedded in the `.vc` `[progress]` block (decision A1) | VC spec §Progress |
 
 Legacy files (`list.txt`, `rules.txt`, `vcrack_state.txt`, `Fvc_header.tc`)
 remain **readable** so an existing setup keeps working; a one-time
@@ -72,7 +72,7 @@ remain **readable** so an existing setup keeps working; a one-time
 2. Server computes the `.vc` name: `<basename>-<sizeInBytes>.vc`.
    The byte size disambiguates same-named files.
 3. If the `.vc` exists → load everything from it (settings, word list,
-   rules, stats, progress pointer, header path).
+   rules, stats, embedded progress, header path).
 4. If not → create it from the current global defaults (from
    `vcrack.config`), then extract the header once into
    `<name>.<ext>_header.hf` and record its path.
