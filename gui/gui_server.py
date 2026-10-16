@@ -228,7 +228,7 @@ def config_save(patch):
     return cfg
 
 VC_SECTION_ORDER = ["meta", "target", "header", "settings", "words", "rules", "stats", "progress"]
-VC_LIST_SECTIONS = {"words", "rules"}
+VC_LIST_SECTIONS = {"words", "rules", "progress"}   # progress: rohe DONE/PART-Zeilen erhalten
 
 def _write_vc(path, ini):
     sections = []
@@ -437,7 +437,7 @@ def ensure_vc(header_name):
         "words": {"*": words},
         "rules": {"*": rules},
         "stats": {"runtime_sec": "0", "hashes_tested": "0", "found": "0"},
-        "progress": {"state_file": os.path.splitext(name)[0] + ".state"},
+        "progress": {"*": []},   # leer; die Engine haengt DONE/PART direkt ans Dateiende an
     }
     _write_vc(os.path.join(WORK, name), ini)
     return {"created": True, "file": name, "settings": ini["settings"]}

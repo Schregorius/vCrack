@@ -144,26 +144,29 @@ static void compileRules(){
         else if(r.type=="max-ein-ever"){ maxOneEver=true; }
     }
 }
+// Eine einzelne Regelzeile parsen und (falls gueltig) an RULES anhaengen.
+// Genutzt von loadRulesFile (rules.txt) UND loadVcFile (.vc [rules]).
+static void parseRuleLine(string line){
+    size_t h=line.find('#'); if(h!=string::npos) line=line.substr(0,h);
+    stringstream ss(line); vector<string> tok; string t; while(ss>>t) tok.push_back(t);
+    if(tok.empty()) return; string kw=lower(tok[0]); Rule r;
+    // English keywords are primary; German keywords kept as aliases (backward compatible).
+    if((kw=="length"||kw=="laenge") && tok.size()>=3){ r.type="laenge"; r.a=atoi(tok[1].c_str()); r.b=atoi(tok[2].c_str()); }
+    else if((kw=="frompos"||kw=="abpos") && tok.size()>=2){ r.type="abpos"; r.a=atoi(tok[1].c_str());
+        for(size_t i=2;i<tok.size();i++){ if(tok[i]==":") continue; r.left.push_back(tok[i]); } }
+    else if(kw=="forbid-adjacent"||kw=="nachbarn-verboten"){ r.type="nachbarn"; bool right=false;
+        for(size_t i=1;i<tok.size();i++){ if(tok[i]=="->"){ right=true; continue; }
+            if(right) r.right.push_back(tok[i]); else r.left.push_back(tok[i]); } }
+    else if(kw=="exclusive"||kw=="exklusiv"){ r.type="exklusiv"; for(size_t i=1;i<tok.size();i++) r.left.push_back(tok[i]); }
+    else if((kw=="not-at-end"||kw=="nicht-am-ende") && tok.size()>=2){ r.type="nicht-am-ende"; r.a=atoi(tok[1].c_str());
+        for(size_t i=2;i<tok.size();i++){ if(tok[i]==":") continue; r.left.push_back(tok[i]); } }
+    else if(kw=="max-one-ever"||kw=="max-ein-ever"){ r.type="max-ein-ever"; }
+    else { fprintf(stderr,"[!] Unknown rule: %s\n",tok[0].c_str()); return; }
+    RULES.push_back(r);
+}
 static bool loadRulesFile(const string&file){
     ifstream in(file); if(!in) return false; RULES.clear(); string line;
-    while(getline(in,line)){
-        size_t h=line.find('#'); if(h!=string::npos) line=line.substr(0,h);
-        stringstream ss(line); vector<string> tok; string t; while(ss>>t) tok.push_back(t);
-        if(tok.empty()) continue; string kw=lower(tok[0]); Rule r;
-        // English keywords are primary; German keywords kept as aliases (backward compatible).
-        if((kw=="length"||kw=="laenge") && tok.size()>=3){ r.type="laenge"; r.a=atoi(tok[1].c_str()); r.b=atoi(tok[2].c_str()); }
-        else if((kw=="frompos"||kw=="abpos") && tok.size()>=2){ r.type="abpos"; r.a=atoi(tok[1].c_str());
-            for(size_t i=2;i<tok.size();i++){ if(tok[i]==":") continue; r.left.push_back(tok[i]); } }
-        else if(kw=="forbid-adjacent"||kw=="nachbarn-verboten"){ r.type="nachbarn"; bool right=false;
-            for(size_t i=1;i<tok.size();i++){ if(tok[i]=="->"){ right=true; continue; }
-                if(right) r.right.push_back(tok[i]); else r.left.push_back(tok[i]); } }
-        else if(kw=="exclusive"||kw=="exklusiv"){ r.type="exklusiv"; for(size_t i=1;i<tok.size();i++) r.left.push_back(tok[i]); }
-        else if((kw=="not-at-end"||kw=="nicht-am-ende") && tok.size()>=2){ r.type="nicht-am-ende"; r.a=atoi(tok[1].c_str());
-            for(size_t i=2;i<tok.size();i++){ if(tok[i]==":") continue; r.left.push_back(tok[i]); } }
-        else if(kw=="max-one-ever"||kw=="max-ein-ever"){ r.type="max-ein-ever"; }
-        else { fprintf(stderr,"[!] Unknown rule: %s\n",tok[0].c_str()); continue; }
-        RULES.push_back(r);
-    }
+    while(getline(in,line)) parseRuleLine(line);
     return true;
 }
 static void installDefaultRules(){
@@ -211,6 +214,54 @@ static bool loadWords(const string&file){
 
 // ------------------------------- Optionen ----------------------------
 static string wordsFile="list.txt",targetFile="Fvc_header.tc",rulesFile="rules.txt";
+static string vcFile="";        // --vc: .vc als einzige Quelle (Woerter+Regeln+Header+Fortschritt)
+static bool   targetSet=false;  // wurde --target explizit gesetzt?
+
+// Laedt Woerter, Regeln und Header aus einer .vc-Datei (INI). Fuellt W/Wlower und RULES.
+// Der [progress]-Block wird NICHT hier gelesen (das macht loadState gegen dieselbe Datei).
+static bool loadVcFile(const string&path){
+    ifstream in(path); if(!in) return false;
+    W.clear(); Wlower.clear(); RULES.clear();
+    string line, section;
+    vector<pair<int,string>> words;   // (index, text)
+    while(getline(in,line)){
+        // CR entfernen (falls CRLF)
+        if(!line.empty() && line.back()=='\r') line.pop_back();
+        string s=line; size_t a=0,b=s.size();
+        while(a<b&&(unsigned char)s[a]<=' ') a++; while(b>a&&(unsigned char)s[b-1]<=' ') b--;
+        s=s.substr(a,b-a);
+        if(s.empty()||s[0]=='#') continue;
+        if(s[0]=='['&&s.back()==']'){ section=lower(s.substr(1,s.size()-2)); continue; }
+        if(section=="words"){
+            // "index ; used ; text"
+            vector<string> p; string cur; for(char c:s){ if(c==';'){p.push_back(cur);cur.clear();} else cur+=c; } p.push_back(cur);
+            if(p.size()>=3){
+                int idx=atoi(p[0].c_str());
+                string txt=p[2];
+                size_t x=0,y=txt.size(); while(x<y&&(unsigned char)txt[x]<=' ')x++; while(y>x&&(unsigned char)txt[y-1]<=' ')y--;
+                txt=txt.substr(x,y-x);
+                if(!txt.empty()) words.push_back({idx,txt});
+            }
+        } else if(section=="rules"){
+            parseRuleLine(s);
+        } else if(section=="header"){
+            size_t eq=s.find('='); if(eq!=string::npos){
+                string k=lower(s.substr(0,eq)); string v=s.substr(eq+1);
+                size_t x=0,y=v.size(); while(x<y&&(unsigned char)v[x]<=' ')x++; while(y>x&&(unsigned char)v[y-1]<=' ')y--;
+                v=v.substr(x,y-x);
+                if(k.find("file")!=string::npos && !targetSet && !v.empty()) targetFile=v;
+            }
+        }
+    }
+    std::sort(words.begin(),words.end(),[](const pair<int,string>&A,const pair<int,string>&B){return A.first<B.first;});
+    for(auto&pr:words){
+        const string&t=pr.second;
+        Word w; w.text=t; w.bytes.assign(t.begin(),t.end()); string lw=lower(t);
+        w.isEver=(lw=="ever"); w.isForever=(lw=="forever"); w.isFor=(lw=="for"); w.is4=(lw=="4");
+        W.push_back(std::move(w)); Wlower.push_back(lw);
+    }
+    return !W.empty();
+}
 static string fHash="",fSize="",device="gpu"; static int tempAbort=90; static int cliMin=-1,cliMax=-1;
 static int gMinLen=7,gMaxLen=10;
 static uint64_t gSkip=0,gLimit=UINT64_MAX;
@@ -589,6 +640,7 @@ struct DoneRec{ string mode; int len; string fw; string rhash; string wcsv; stri
 static vector<DoneRec> g_state;
 static unordered_map<string,uint64_t> g_part;   // Zwischenstand je Block -> Offset (getestete Kandidaten)
 static const char* STATE_FILE="vcrack_state.txt";
+static string g_stateFile=STATE_FILE;   // bei --vc: die .vc-Datei (Progress ist dort die letzte Sektion)
 static vector<string> splitPipe(const string&s,size_t from){
     vector<string> f; string cur; for(size_t i=from;i<s.size();i++){ char c=s[i]; if(c=='|'){ f.push_back(cur); cur.clear(); } else cur+=c; } f.push_back(cur); return f;
 }
@@ -599,7 +651,7 @@ static string partKey(const string&mode,int len,const string&fw,const string&rha
     return mode+"|"+to_string(len)+"|"+fw+"|"+rhash+"|"+wcsv+"|"+rb;
 }
 static void loadState(){
-    g_state.clear(); g_part.clear(); ifstream in(STATE_FILE); if(!in) return; string line;
+    g_state.clear(); g_part.clear(); ifstream in(g_stateFile); if(!in) return; string line;
     while(getline(in,line)){
         if(line.rfind("DONE|",0)==0){
             vector<string> f=splitPipe(line,5);
@@ -616,13 +668,13 @@ static void loadState(){
     }
 }
 static void appendDone(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,const string&rules){
-    FILE*f=fopen(STATE_FILE,"ab");
+    FILE*f=fopen(g_stateFile.c_str(),"ab");
     if(f){ fprintf(f,"DONE|%s|%d|%s|%s|%s|%s\n",mode.c_str(),len,fw.c_str(),rhash.c_str(),wcsv.c_str(),rules.c_str()); fclose(f); }
     g_state.push_back(DoneRec{mode,len,fw,rhash,wcsv,rules});
 }
 static void writePart(const string&mode,int len,const string&fw,const string&rhash,const string&wcsv,uint64_t cfgSig,uint64_t offset){
     char rb[20]; snprintf(rb,sizeof(rb),"%016llx",(unsigned long long)cfgSig);
-    FILE*f=fopen(STATE_FILE,"ab");
+    FILE*f=fopen(g_stateFile.c_str(),"ab");
     if(f){ fprintf(f,"PART|%s|%d|%s|%s|%s|%s|%llu\n",mode.c_str(),len,fw.c_str(),rhash.c_str(),wcsv.c_str(),rb,(unsigned long long)offset); fclose(f); }
     g_part[partKey(mode,len,fw,rhash,wcsv,cfgSig)]=offset;
 }
@@ -692,7 +744,7 @@ static int doRun(){
         return 2;
     }
 
-    fprintf(stderr,"[*] Resume aus %s (%zu Eintraege). Regel-Signatur: %s\n",STATE_FILE,g_state.size(),rhash.c_str());
+    fprintf(stderr,"[*] Resume aus %s (%zu Eintraege). Regel-Signatur: %s\n",g_stateFile.c_str(),g_state.size(),rhash.c_str());
     fprintf(stderr,"[*] %zu Modi x Laenge %d-%d = %ld Bloecke (lange Laengen >=%d zusaetzlich nach 2. Wort aufgeteilt).\n",
             modeIdx.size(),gMinLen,gMaxLen,totalShards,SHARD2_MINLEN);
     fprintf(stderr,"    Bereits Erledigtes wird uebersprungen. (Abbruch mit Strg+C jederzeit moeglich; fertige Bloecke bleiben gespeichert.)\n");
@@ -992,7 +1044,8 @@ int main(int argc,char**argv){
         auto val=[&](const char*d)->string{ return (i+1<argc)? string(argv[++i]) : string(d); };
         if(a=="--rules") rulesFile=val("rules.txt");
         else if(a=="--words") wordsFile=val("list.txt");
-        else if(a=="--target") targetFile=val("Fvc_header.tc");
+        else if(a=="--target"){ targetFile=val("Fvc_header.tc"); targetSet=true; }
+        else if(a=="--vc") vcFile=val("");
         else if(a=="--min") cliMin=atoi(val("7").c_str());
         else if(a=="--max") cliMax=atoi(val("10").c_str());
         else if(a=="--skip") gSkip=strtoull(val("0").c_str(),nullptr,10);
@@ -1012,11 +1065,20 @@ int main(int argc,char**argv){
     }
     if(cmd=="header") return doHeader();   // braucht weder Wortliste noch Regeln
 
-    if(!loadWords(wordsFile)){ fprintf(stderr,"[-] Wortliste nicht lesbar: %s\n",wordsFile.c_str()); return 2; }
+    bool haveRules;
+    if(!vcFile.empty()){
+        // .vc ist die einzige Quelle: Woerter + Regeln + Header + (spaeter) Fortschritt.
+        if(!loadVcFile(vcFile)){ fprintf(stderr,"[-] .vc nicht lesbar oder ohne Woerter: %s\n",vcFile.c_str()); return 2; }
+        g_stateFile=vcFile;                 // DONE/PART werden an die .vc angehaengt ([progress] ist letzte Sektion)
+        haveRules = !RULES.empty();
+    } else {
+        if(!loadWords(wordsFile)){ fprintf(stderr,"[-] Wortliste nicht lesbar: %s\n",wordsFile.c_str()); return 2; }
+        haveRules = loadRulesFile(rulesFile);
+    }
     Nw=(int)W.size(); if(Nw==0){ fprintf(stderr,"[-] Wortliste leer.\n"); return 2; }
     if(Nw>64){ fprintf(stderr,"[-] Mehr als 64 Woerter nicht unterstuetzt (Masken).\n"); return 2; }
 
-    bool fromFile=loadRulesFile(rulesFile);
+    bool fromFile=haveRules;
     if(!fromFile) installDefaultRules();
     compileRules();
 
