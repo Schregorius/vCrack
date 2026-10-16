@@ -213,12 +213,9 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
   <section class="tab" id="words">
     <div class="card">
       <h2><span data-i18n="words_lbl_00">Word list (list.txt)</span> — <span id="wordCount">0</span> <span data-i18n="words_cap_00">words</span></h2>
-      <textarea id="wordsText" spellcheck="false"></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="wordsSave"><span data-i18n="app_cmd_02">Save</span></button>
-        <button class="btn gray" id="wordsReload"><span data-i18n="app_cmd_03">Reload</span></button>
-        <div class="hint" data-i18n="words_txt_00">One word per line. After saving, vcrack only tests the newly added combinations.</div>
-      </div>
+      <div id="wordList"></div>
+      <div class="hint" style="margin-top:10px" data-i18n="words_txt_02">Engine limit: at most 64 active words.</div>
+      <div class="hint" data-i18n="words_txt_00">One word per line. After saving, vcrack only tests the newly added combinations.</div>
     </div>
   </section>
 
@@ -315,6 +312,7 @@ async function setLang(v){
   if($("#langSel").value!==v) $("#langSel").value=v;
   const ol=$("#o_lang"); if(ol && ol.value!==v) ol.value=v;
   if(window.extWidget) extWidget.render();
+  if(typeof wlRender==="function" && wlItems.length) wlRender();
 }
 $("#langSel").onchange=()=>setLang($("#langSel").value);
 
@@ -505,13 +503,42 @@ async function runStats(){
 }
 $("#statsRefresh").onclick=runStats;
 
-// Regeln / Wortliste
+// Regeln
 async function loadRules(){ $("#rulesText").value=await api("/api/rules"); }
-async function loadWords(){ const t=await api("/api/words"); $("#wordsText").value=t; $("#wordCount").textContent=t.split(/\r?\n/).filter(x=>x.trim()).length; }
 $("#rulesReload").onclick=loadRules;
 $("#rulesSave").onclick=async()=>{ await api("/api/rules","POST",$("#rulesText").value); $("#rulesHint").textContent=T("app_cxt_02"); setTimeout(()=>$("#rulesHint").textContent="",2000); };
-$("#wordsReload").onclick=loadWords;
-$("#wordsSave").onclick=async()=>{ await api("/api/words","POST",$("#wordsText").value); loadWords(); };
+
+// Wortliste (Index + used; die Index-Logik liegt serverseitig)
+const WERR={empty:"",double:"words_txt_04",engine:"words_txt_02",max:"words_txt_01",used:"words_txt_03",notfound:"app_cxt_12"};
+let wlItems=[], wlEdit=-1;
+function wlRender(payload){
+  if(payload && payload.words){ wlItems=payload.words; }
+  const host=$("#wordList"); if(!host) return; host.innerHTML="";
+  const sel=document.createElement("select"); sel.size=Math.min(12,Math.max(4,wlItems.length+1)); sel.style.width="100%";
+  wlItems.forEach(w=>{ const o=document.createElement("option"); o.value=w.index; o.textContent=`${w.index}: ${w.text}${w.used?" ✓":""}`; sel.appendChild(o); });
+  host.appendChild(sel);
+  const row=document.createElement("div"); row.className="itemrow";
+  const mk=(t,c)=>{const b=document.createElement("button");b.className="btn "+(c||"gray");b.textContent=t;return b;};
+  const addB=mk(T("app_cmd_05")),edB=mk(T("app_cmd_06")),rmB=mk(T("app_cmd_07"),"red");
+  edB.disabled=true; rmB.disabled=true; row.append(addB,edB,rmB); host.appendChild(row);
+  const mask=document.createElement("div"); mask.className="editmask";
+  const inp=document.createElement("input"); inp.type="text";
+  const saveB=mk(T("app_cmd_02"),""),backB=mk(T("app_cmd_08"));
+  mask.append(inp,saveB,backB); host.appendChild(mask);
+  const err=document.createElement("div"); err.className="hint"; host.appendChild(err);
+  const show=on=>{mask.className="editmask"+(on?" on":"");err.textContent="";if(on)inp.focus();};
+  const applyErr=p=>{ if(p&&p.error){ const v=WERR[p.error]; err.textContent=v?T(v):p.error; return true;} return false; };
+  const ok=p=>{ wlRender(p); $("#wordCount").textContent=p.active; };
+  sel.onchange=()=>{const h=sel.selectedIndex>=0;edB.disabled=!h;rmB.disabled=!h;};
+  addB.onclick=()=>{ wlEdit=-1; inp.value=""; show(true); };
+  edB.onclick=()=>{ const i=+sel.value; if(isNaN(i))return; wlEdit=i; const w=wlItems.find(x=>x.index===i); inp.value=w?w.text:""; show(true); };
+  rmB.onclick=async()=>{ const i=+sel.value; if(isNaN(i))return; const p=await api("/api/wordlist","POST",{op:"remove",index:i}); if(!applyErr(p)) ok(p); };
+  saveB.onclick=async()=>{ const t=inp.value.trim(); const p= wlEdit>=0
+      ? await api("/api/wordlist","POST",{op:"edit",index:wlEdit,text:t})
+      : await api("/api/wordlist","POST",{op:"add",text:t});
+    if(!applyErr(p)) ok(p); };
+}
+async function loadWords(){ const p=await api("/api/wordlist"); wlRender(p); $("#wordCount").textContent=p.active; }
 
 // Startup
 (async()=>{

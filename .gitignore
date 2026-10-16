@@ -4,6 +4,7 @@
 
 # Sensible Daten - NIE committen
 list.txt
+list.meta
 rules.txt
 *.tc
 *vc_header*

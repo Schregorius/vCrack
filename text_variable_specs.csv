@@ -1,4 +1,4 @@
-1-2026-10-16-e0e2baa7ec851b5c
+1-2026-10-16-89495e93d696f86a
 Index-Number;Variable-Name;Text
 000;app_tab_00;Cockpit
 001;app_tab_01;Statistics
@@ -108,3 +108,5 @@ Index-Number;Variable-Name;Text
 463;words_cap_01;Index
 464;words_cap_02;Used
 465;words_cap_03;Word
+466;words_txt_03;A word was used in a run and cannot be removed.
+467;words_txt_04;This word is already in the list.

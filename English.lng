@@ -1,5 +1,5 @@
 English
-e0e2baa7ec851b5c
+89495e93d696f86a
 
 
 000;Cockpit
@@ -110,3 +110,5 @@ e0e2baa7ec851b5c
 463;Index
 464;Used
 465;Word
+466;A word was used in a run and cannot be removed.
+467;This word is already in the list.

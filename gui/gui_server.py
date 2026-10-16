@@ -276,6 +276,118 @@ def vc_save_settings(header_name, settings):
     _write_vc(p, ini)
     return {"ok": True, "file": os.path.basename(p)}
 
+# ---------------------------------------------------------------- Wortliste (Byte-Index + used)
+# Strukturierte Wortliste in list.meta (Zeilen "index ; used ; text", identisch zum
+# .vc [words]-Format, spaeter 1:1 uebernehmbar). list.txt wird daraus fuer die Engine
+# regeneriert (aktive Woerter in Index-Reihenfolge). Index-/used-Logik aus VC-Spec §4.
+WORD_ENGINE_LIMIT = 64      # 64-Bit-Masken im Generator-Kern
+WORD_MAX_INDEX    = 255     # Byte-Index laut Issue (0..254)
+WL_META = "list.meta"
+
+def wl_load():
+    p = os.path.join(WORK, WL_META)
+    words = []
+    if os.path.isfile(p):
+        with open(p, "r", encoding="utf-8", errors="ignore") as f:
+            for ln in f:
+                s = ln.strip()
+                if not s or s.startswith("#"):
+                    continue
+                parts = s.split(";")
+                if len(parts) < 3:
+                    continue
+                try: idx = int(parts[0].strip())
+                except ValueError: continue
+                used = parts[1].strip() in ("1", "true", "True")
+                text = ";".join(parts[2:]).strip()
+                words.append({"index": idx, "used": used, "text": text})
+    else:
+        # Bootstrap aus list.txt (ein Wort pro Zeile) -> Indizes in Reihenfolge, used=0
+        lp = os.path.join(WORK, "list.txt")
+        if os.path.isfile(lp):
+            i = 0
+            with open(lp, "r", encoding="utf-8", errors="ignore") as f:
+                for ln in f:
+                    t = ln.strip()
+                    if t:
+                        words.append({"index": i, "used": False, "text": t}); i += 1
+    words.sort(key=lambda w: w["index"])
+    return words
+
+def wl_save(words):
+    words = sorted(words, key=lambda w: w["index"])
+    with open(os.path.join(WORK, WL_META), "w", encoding="utf-8", newline="\n") as f:
+        for w in words:
+            f.write("%d ; %d ; %s\n" % (w["index"], 1 if w["used"] else 0, w["text"]))
+    # list.txt fuer die Engine: aktive (nicht-leere) Woerter in Index-Reihenfolge
+    with open(os.path.join(WORK, "list.txt"), "w", encoding="utf-8", newline="\n") as f:
+        for w in words:
+            if w["text"]:
+                f.write(w["text"] + "\n")
+    return words
+
+def wl_active(words):
+    return [w for w in words if w["text"]]
+
+def wl_payload(words=None, error=None):
+    if words is None:
+        words = wl_load()
+    return {"words": words, "active": len(wl_active(words)),
+            "engine_limit": WORD_ENGINE_LIMIT, "max_index": WORD_MAX_INDEX,
+            "error": error}
+
+def wl_add(text):
+    text = (text or "").strip()
+    words = wl_load()
+    if not text:
+        return wl_payload(words, error="empty")
+    if any(w["text"].lower() == text.lower() for w in words):
+        return wl_payload(words, error="double")
+    if len(wl_active(words)) >= WORD_ENGINE_LIMIT:
+        return wl_payload(words, error="engine")
+    nextidx = (max((w["index"] for w in words), default=-1) + 1)
+    if nextidx > WORD_MAX_INDEX:
+        return wl_payload(words, error="max")
+    words.append({"index": nextidx, "used": False, "text": text})
+    return wl_payload(wl_save(words))
+
+def wl_edit(index, text):
+    text = (text or "").strip()
+    words = wl_load()
+    if not text:
+        return wl_payload(words, error="empty")
+    if any(w["text"].lower() == text.lower() and w["index"] != index for w in words):
+        return wl_payload(words, error="double")
+    for w in words:
+        if w["index"] == index:
+            w["text"] = text
+            return wl_payload(wl_save(words))
+    return wl_payload(words, error="notfound")
+
+def wl_remove(index):
+    words = wl_load()
+    tgt = next((w for w in words if w["index"] == index), None)
+    if tgt is None:
+        return wl_payload(words, error="notfound")
+    if tgt["used"]:
+        return wl_payload(words, error="used")   # benutzte Indizes bleiben gepinnt
+    higher = [w for w in words if w["index"] > index]
+    words = [w for w in words if w["index"] != index]
+    if higher and all(not w["used"] for w in higher):
+        for w in higher:
+            w["index"] -= 1                       # Luecke schliessen (alle hoeheren unbenutzt)
+    return wl_payload(wl_save(words))
+
+def wl_mark_all_used():
+    """Beim Start eines Runs: alle aktiven Woerter auf used=1."""
+    words = wl_load()
+    changed = False
+    for w in words:
+        if w["text"] and not w["used"]:
+            w["used"] = True; changed = True
+    if changed:
+        wl_save(words)
+
 def list_targets():
     """Moegliche VeraCrypt-Header im Arbeitsordner (fuer den Ziel-Selektor)."""
     out = []
@@ -396,6 +508,8 @@ def start_run(cfg):
         if cfg.get("device"):args += ["--device", str(cfg["device"])]
         if cfg.get("target"):args += ["--target", str(cfg["target"])]
         if cfg.get("checkpoint") is not None: args += ["--checkpoint", str(cfg["checkpoint"])]
+        try: wl_mark_all_used()          # alle aktiven Woerter als "in einem Run benutzt" markieren
+        except Exception: pass
         logf = open(LOG, "wb")
         kw = {}
         if IS_WIN:
@@ -471,6 +585,8 @@ class H(http.server.BaseHTTPRequestHandler):
             q = parse_qs(urlparse(self.path).query)
             tgt = (q.get("target", [""])[0]) or ""
             self._send(200, vc_load_settings(tgt))
+        elif p == "/api/wordlist":
+            self._send(200, wl_payload())
         else:
             self._send(404, {"error": "unbekannt"})
 
@@ -491,6 +607,13 @@ class H(http.server.BaseHTTPRequestHandler):
             q = parse_qs(urlparse(self.path).query)
             tgt = (q.get("target", [""])[0]) or body.get("target", "")
             self._send(200, vc_save_settings(tgt, body.get("settings", {}))); return
+        if p == "/api/wordlist":
+            op = body.get("op", "list")
+            if op == "add":      self._send(200, wl_add(body.get("text", "")))
+            elif op == "edit":   self._send(200, wl_edit(int(body.get("index", -1)), body.get("text", "")))
+            elif op == "remove": self._send(200, wl_remove(int(body.get("index", -1))))
+            else:                self._send(200, wl_payload())
+            return
         if p == "/api/run":
             act = body.get("action")
             if act == "start": self._send(200, start_run(body.get("cfg", {})))

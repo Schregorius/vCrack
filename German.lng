@@ -1,5 +1,5 @@
 Deutsch
-e0e2baa7ec851b5c
+89495e93d696f86a
 vcrack-Team
 
 000;Cockpit
@@ -110,3 +110,5 @@ vcrack-Team
 463;Index
 464;Benutzt
 465;Wort
+466;Ein Wort wurde in einem Run benutzt und kann nicht entfernt werden.
+467;Dieses Wort steht bereits in der Liste.
