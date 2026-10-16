@@ -1,4 +1,4 @@
-# vcrack 1.0.2
+# vcrack 1.1.0
 
 [English](README.md) | **Deutsch**
 
@@ -28,6 +28,14 @@ Suchraum von „unendlich" auf „machbar".
 - **Such-Hash-Cache**: `count`, `sample` und `estimate` teilen sich Ergebnisse, solange Wörter/Regeln/Längen unverändert sind.
 - **Sicherheits-Check**: Startet nur, wenn hashcat tatsächlich ein GPU-Device sieht, und markiert einen Block **nur** nach einem echten (erschöpften) hashcat-Lauf als erledigt – kein Scheinfortschritt bei fehlender GPU.
 - **Grafische Oberfläche** (optional): lokale Web-UI im Win11-Fluent-Stil, startet in einem eigenständigen Fenster.
+- **Mehrsprachige GUI**: alle Texte liegen als Variablen in `text_variable_specs.csv`; Übersetzungen in `<Sprache>.lng` (mitgeliefert: Deutsch, English). Umschaltbar im Kopf und in den Einstellungen. Ein **Label-Hash** erkennt veraltete Übersetzungen.
+- **Einstellungen-Tab**: globale Optionen in `vcrack.config` (Sprache, Design, erkannte Dateiendungen, Standard-Header-Bytes, Standardwerte für neue Ziele) und zieldatei-spezifische Optionen in der `.vc`-Datei.
+- **Zieldatei-`.vc`**: pro Ziel eine Datei (`<Name>-<Bytes>.vc`) mit Header-Pfad, Einstellungen, Wortliste, Regeln, Statistik und Fortschritts-Verweis. Wird beim Wählen eines Ziels automatisch angelegt/geladen.
+- **Wortliste als Liste**: Add/Edit/Remove statt Textfeld, jedes Wort mit Byte-Index und „benutzt"-Markierung.
+
+> **Wortzahl-Grenzen:** max. **255** Wörter (Byte-Index 0–254). Der Generator-Kern nutzt 64-Bit-Masken, daher sind aktuell höchstens **64 aktive** Wörter möglich; die GUI weist darauf hin.
+
+Die Format-Spezifikationen (`.vc`, `vcrack.config`, `.lng`, Text-Variablen/Label-Hash) und der Architektur-Plan liegen im Ordner [`docs/`](docs/).
 
 ---
 
@@ -200,9 +208,12 @@ Cipher-Kaskade – darum misst vcrack ein H/s je Hash und überträgt es.
 ## Sicherheit / nicht im Repo
 
 Die `.gitignore` hält **sensible und erzeugte Dateien draußen**: `list.txt`,
-`rules.txt`, der Volume-Header (`*.tc`, `*vc_header*`), `geknackt.txt`, der
-Fortschritt/Cache (`vcrack_*.txt`) sowie `*.exe`. Lade niemals deine echte
-Wortliste oder den Header hoch – sie verraten dein Passwort.
+`list.meta`, `rules.txt`, der Volume-Header (`*.tc`, `*vc_header*`, `*.hf`),
+`geknackt.txt`, die zieldatei-bezogenen Dateien (`vcrack.config`, `*.vc`, `*.state`)
+sowie Fortschritt/Cache (`vcrack_*.txt`) und `*.exe`. Lade niemals deine echte
+Wortliste, die `.vc`-Datei oder den Header hoch – sie verraten dein Passwort.
+Die App-Ressourcen `text_variable_specs.csv` und die `*.lng` enthalten **keine**
+Nutzerdaten und gehören ins Repo.
 
 ## Lizenz
 

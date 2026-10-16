@@ -1,4 +1,4 @@
-# vcrack 1.0.2
+# vcrack 1.1.0
 
 **English** | [Deutsch](README-DE.md)
 
@@ -28,6 +28,14 @@ search space from "infinite" to "feasible".
 - **Search-hash cache**: `count`, `sample` and `estimate` share results as long as words/rules/lengths are unchanged.
 - **Safety check**: only starts if hashcat actually sees a GPU device, and marks a block as done **only** after a genuine (exhausted) hashcat run — no fake progress when the GPU is missing.
 - **Graphical interface** (optional): local Win11-style Fluent web UI, opens in a standalone window.
+- **Multi-language GUI**: every string lives as a variable in `text_variable_specs.csv`; translations in `<Language>.lng` (shipped: German, English). Switchable in the header and in Settings. A **label-hash** detects out-of-date translations.
+- **Settings tab**: global options in `vcrack.config` (language, theme, recognised file extensions, default header bytes, defaults for new targets) and per-target options in the `.vc` file.
+- **Per-target `.vc`**: one file per target (`<name>-<bytes>.vc`) holding header path, settings, word list, rules, stats and a progress pointer. Created/loaded automatically when you pick a target.
+- **Word list as a list**: add/edit/remove instead of a text box, each word with a byte index and a "used" flag.
+
+> **Word-count limits:** at most **255** words (byte index 0–254). The generator core uses 64-bit masks, so currently at most **64 active** words are allowed; the GUI warns about this.
+
+Format specs (`.vc`, `vcrack.config`, `.lng`, text variables/label-hash) and the architecture plan live in [`docs/`](docs/).
 
 ---
 
@@ -196,10 +204,13 @@ cascade — so vcrack measures one H/s per hash and reuses it.
 
 ## Security / not in the repo
 
-`.gitignore` keeps **sensitive and generated files out**: `list.txt`, `rules.txt`,
-the volume header (`*.tc`, `*vc_header*`), `geknackt.txt`, the progress/cache
-(`vcrack_*.txt`) and `*.exe`. Never upload your real word list or header — they
-reveal your password.
+`.gitignore` keeps **sensitive and generated files out**: `list.txt`, `list.meta`,
+`rules.txt`, the volume header (`*.tc`, `*vc_header*`, `*.hf`), `geknackt.txt`, the
+per-target files (`vcrack.config`, `*.vc`, `*.state`), the progress/cache
+(`vcrack_*.txt`) and `*.exe`. Never upload your real word list, the `.vc` file, or
+the header — they reveal your password. The app resources
+`text_variable_specs.csv` and the `*.lng` files contain **no** user data and belong
+in the repo.
 
 ## License
 
