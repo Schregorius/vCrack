@@ -22,3 +22,7 @@ vcrack.config
 *.state
 *.hf
 *_header.hf
+
+# Python-Cache
+__pycache__/
+*.pyc
