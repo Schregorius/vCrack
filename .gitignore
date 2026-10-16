@@ -15,3 +15,10 @@ vcrack_cache.txt
 vcrack_bench.txt
 gui_run.log
 *.bak
+
+# Zieldatei-bezogene Nutzerdaten (verraten das Passwort) - NIE committen
+vcrack.config
+*.vc
+*.state
+*.hf
+*_header.hf

@@ -1,5 +1,5 @@
 Deutsch
-57f54e3a8e9ab32c
+e0e2baa7ec851b5c
 vcrack-Team
 
 000;Cockpit
@@ -81,3 +81,32 @@ vcrack-Team
 439;Wortliste (list.txt)
 440;Woerter
 441;Ein Wort pro Zeile. Nach dem Speichern testet vcrack nur die neu hinzugekommenen Kombinationen.
+004;Einstellungen
+105;Hinzufügen
+106;Bearbeiten
+107;Entfernen
+442;Globale Einstellungen
+443;Zieldatei-Einstellungen
+444;Standardwerte für neue Ziele
+445;Sprache
+446;Design
+447;Erkannte Dateiendungen
+448;Standard-Header-Bytes
+449;Laenge min
+450;Laenge max
+451;Rechenwerk
+452;Checkpoint (Sek)
+453;Workload (1-4)
+454;Temp-Notaus (°C)
+455;Aktives Ziel
+456;automatisch
+457;hell
+458;dunkel
+459;Globale Einstellungen liegen in vcrack.config. Ziel-Einstellungen stehen in der .vc-Datei des Ziels.
+460;Kein Ziel gewählt. Waehle im Cockpit-Tab ein Ziel.
+108;Zurück
+461;Maximal 255 Wörter erreicht. Lösche ein Wort, bevor du ein neues hinzufügst.
+462;Engine-Grenze: höchstens 64 aktive Wörter.
+463;Index
+464;Benutzt
+465;Wort

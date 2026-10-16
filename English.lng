@@ -1,16 +1,21 @@
 English
-57f54e3a8e9ab32c
+e0e2baa7ec851b5c
 
 
 000;Cockpit
 001;Statistics
 002;Rules
 003;Word list
+004;Settings
 100;Start
 101;Stop
 102;Save
 103;Reload
 104;Extract
+105;Add
+106;Edit
+107;Remove
+108;Back
 200;ready
 201;running
 202;saved
@@ -81,3 +86,27 @@ English
 439;Word list (list.txt)
 440;words
 441;One word per line. After saving, vcrack only tests the newly added combinations.
+442;Global settings
+443;Target-specific settings
+444;Defaults for new targets
+445;Language
+446;Theme
+447;Recognised file extensions
+448;Default header bytes
+449;Length min
+450;Length max
+451;Compute device
+452;Checkpoint (sec)
+453;Workload (1-4)
+454;Temp abort (°C)
+455;Active target
+456;auto
+457;light
+458;dark
+459;Global settings are stored in vcrack.config. Target settings live in the target .vc file.
+460;No target selected. Pick a target in the Cockpit tab.
+461;Maximum 255 words reached. Delete a word before adding a new one.
+462;Engine limit: at most 64 active words.
+463;Index
+464;Used
+465;Word

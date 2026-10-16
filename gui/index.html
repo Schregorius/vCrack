@@ -93,6 +93,13 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
 .ksrow .pct{width:56px;text-align:right;color:var(--sub)}
 .hint{font-size:12px;color:var(--sub);margin-top:8px}
 .big{font-size:26px;font-weight:700;margin:2px 0}
+.itemrow{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.itemrow .btn{padding:7px 14px}
+.editmask{display:none;margin-top:8px;gap:6px;flex-wrap:wrap}
+.editmask.on{display:flex}
+.editmask input{flex:1;min-width:160px}
+.warnbox{background:linear-gradient(90deg,rgba(196,43,28,.15),transparent);border:1px solid var(--bad);
+  border-radius:var(--radius);padding:8px 12px;margin-top:8px;font-size:12px}
 .i18nwarn{background:linear-gradient(90deg,rgba(157,93,0,.18),transparent);border:1px solid var(--warn);
   border-radius:var(--radius);padding:8px 12px;margin:0 22px 6px;font-size:12px;color:var(--text);display:none}
 </style>
@@ -110,6 +117,7 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
   <button data-tab="stats" data-i18n="app_tab_01">Statistics</button>
   <button data-tab="rules" data-i18n="app_tab_02">Rules</button>
   <button data-tab="words" data-i18n="app_tab_03">Word list</button>
+  <button data-tab="options" data-i18n="app_tab_04">Settings</button>
 </nav>
 <main>
 
@@ -214,6 +222,60 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
     </div>
   </section>
 
+  <!-- EINSTELLUNGEN / SETTINGS -->
+  <section class="tab" id="options">
+    <div class="card">
+      <h2 data-i18n="options_lbl_00">Global settings</h2>
+      <div class="hint" style="margin-bottom:12px" data-i18n="options_txt_00">Global settings are stored in vcrack.config. Target settings live in the target .vc file.</div>
+      <div class="row">
+        <div class="field"><label data-i18n="options_cap_00">Language</label><select id="o_lang"></select></div>
+        <div class="field"><label data-i18n="options_cap_01">Theme</label><select id="o_theme">
+          <option value="auto" data-i18n="options_drp_00">auto</option>
+          <option value="light" data-i18n="options_drp_01">light</option>
+          <option value="dark" data-i18n="options_drp_02">dark</option></select></div>
+        <div class="field"><label data-i18n="options_cap_03">Default header bytes</label><input type="number" id="o_hbytes" min="512" step="512" value="524288"></div>
+      </div>
+      <div class="row" style="margin-top:14px;align-items:flex-start">
+        <div class="field" style="min-width:260px"><label data-i18n="options_cap_02">Recognised file extensions</label>
+          <div id="extList"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="options_lbl_02">Defaults for new targets</h2>
+      <div class="row">
+        <div class="field"><label data-i18n="options_cap_04">Length min</label><input type="number" id="o_min" min="1" max="30" value="7"></div>
+        <div class="field"><label data-i18n="options_cap_05">Length max</label><input type="number" id="o_max" min="1" max="30" value="10"></div>
+        <div class="field"><label data-i18n="options_cap_06">Compute device</label><select id="o_dev"><option value="gpu" data-i18n="cockpit_drp_01">GPU</option><option value="both" data-i18n="cockpit_drp_02">GPU+CPU</option><option value="cpu" data-i18n="cockpit_drp_03">CPU</option></select></div>
+        <div class="field"><label data-i18n="options_cap_07">Checkpoint (sec)</label><input type="number" id="o_cp" min="0" step="30" value="300"></div>
+        <div class="field"><label data-i18n="options_cap_08">Workload (1-4)</label><input type="number" id="o_wl" min="1" max="4" value="3"></div>
+        <div class="field"><label data-i18n="options_cap_09">Temp abort (°C)</label><input type="number" id="o_temp" min="40" max="110" value="90"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="o_saveGlobal"><span data-i18n="app_cmd_02">Save</span></button>
+        <div class="hint" id="o_globalHint"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="options_lbl_01">Target-specific settings</h2>
+      <div class="hint" style="margin-bottom:10px"><span data-i18n="options_cap_10">Active target</span>: <b id="o_tgtName">—</b></div>
+      <div id="o_tgtNone" class="hint" data-i18n="options_txt_01">No target selected. Pick a target in the Cockpit tab.</div>
+      <div id="o_tgtBody" style="display:none">
+        <div class="row">
+          <div class="field"><label data-i18n="options_cap_04">Length min</label><input type="number" id="v_min" min="1" max="30"></div>
+          <div class="field"><label data-i18n="options_cap_05">Length max</label><input type="number" id="v_max" min="1" max="30"></div>
+          <div class="field"><label data-i18n="options_cap_06">Compute device</label><select id="v_dev"><option value="gpu" data-i18n="cockpit_drp_01">GPU</option><option value="both" data-i18n="cockpit_drp_02">GPU+CPU</option><option value="cpu" data-i18n="cockpit_drp_03">CPU</option></select></div>
+          <div class="field"><label data-i18n="options_cap_07">Checkpoint (sec)</label><input type="number" id="v_cp" min="0" step="30"></div>
+          <div class="field"><label data-i18n="options_cap_08">Workload (1-4)</label><input type="number" id="v_wl" min="1" max="4"></div>
+          <div class="field"><label data-i18n="options_cap_09">Temp abort (°C)</label><input type="number" id="v_temp" min="40" max="110"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="v_save"><span data-i18n="app_cmd_02">Save</span></button>
+          <div class="hint" id="v_hint"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
 </main>
 <script>
 const $=s=>document.querySelector(s);
@@ -246,7 +308,93 @@ async function loadI18n(lang){
     else { w.style.display="none"; }
   }catch(e){}
 }
-$("#langSel").onchange=()=>{ loadI18n($("#langSel").value); try{localStorage.setItem("vc_lang",$("#langSel").value)}catch(e){} };
+async function setLang(v){
+  await loadI18n(v);
+  try{localStorage.setItem("vc_lang",v)}catch(e){}
+  try{ api("/api/config","POST",{ui:{language:v}}); }catch(e){}
+  if($("#langSel").value!==v) $("#langSel").value=v;
+  const ol=$("#o_lang"); if(ol && ol.value!==v) ol.value=v;
+  if(window.extWidget) extWidget.render();
+}
+$("#langSel").onchange=()=>setLang($("#langSel").value);
+
+// ---------------- reusable item list (add/edit/remove + single-field mask) ----------------
+class ItemList{
+  constructor(host, opts){ this.host=host; this.opts=opts||{}; this.items=(opts.get?opts.get():[])||[]; this.render(); }
+  setItems(items){ this.items=(items||[]).slice(); this.render(); }
+  render(){
+    const h=this.host, o=this.opts; h.innerHTML="";
+    const sel=document.createElement("select"); sel.size=Math.min(8,Math.max(3,this.items.length+1)); sel.style.width="100%";
+    this.items.forEach((it,i)=>{ const op=document.createElement("option"); op.value=i; op.textContent=(o.display?o.display(it):it); sel.appendChild(op); });
+    h.appendChild(sel);
+    const row=document.createElement("div"); row.className="itemrow";
+    const mk=(txt,cls)=>{ const b=document.createElement("button"); b.className="btn "+(cls||"gray"); b.textContent=txt; return b; };
+    const addB=mk(T("app_cmd_05")), edB=mk(T("app_cmd_06")), rmB=mk(T("app_cmd_07"),"red");
+    edB.disabled=true; rmB.disabled=true; row.append(addB,edB,rmB); h.appendChild(row);
+    const mask=document.createElement("div"); mask.className="editmask";
+    const inp=document.createElement("input"); inp.type="text";
+    const saveB=mk(T("app_cmd_02"),""), backB=mk(T("app_cmd_08"));
+    mask.append(inp,saveB,backB); h.appendChild(mask);
+    const err=document.createElement("div"); err.className="hint"; h.appendChild(err);
+    let editIdx=-1;
+    const showMask=on=>{ mask.className="editmask"+(on?" on":""); err.textContent=""; if(on) inp.focus(); };
+    sel.onchange=()=>{ const has=sel.selectedIndex>=0; edB.disabled=!has; rmB.disabled=!has; };
+    addB.onclick=()=>{ if(o.max && this.items.length>=o.max){ err.textContent=T("words_txt_01"); return; } editIdx=-1; inp.value=""; showMask(true); };
+    edB.onclick=()=>{ const i=+sel.value; if(isNaN(i))return; editIdx=i; inp.value=(o.edit?o.edit(this.items[i]):this.items[i]); showMask(true); };
+    rmB.onclick=()=>{ const i=+sel.value; if(isNaN(i))return; const it=this.items[i]; if(o.canRemove && !o.canRemove(it)){ err.textContent=o.removeMsg?o.removeMsg(it):"—"; return;} this.items.splice(i,1); if(o.commit)o.commit(this.items.slice()); this.render(); };
+    saveB.onclick=()=>{ let v=inp.value.trim(); if(o.transform)v=o.transform(v); const e=o.validate?o.validate(v,editIdx,this.items):null; if(e){err.textContent=e;return;} if(editIdx>=0)this.items[editIdx]=v; else this.items.push(v); if(o.commit)o.commit(this.items.slice()); this.render(); };
+  }
+}
+
+// ---------------- Settings / vcrack.config ----------------
+let CONFIG=null, extWidget=null;
+function applyTheme(t){ const r=document.documentElement; if(!t||t==="auto") r.removeAttribute("data-theme"); else r.setAttribute("data-theme",t); try{localStorage.setItem("vc_theme",t)}catch(e){} }
+async function loadConfig(){
+  CONFIG=await api("/api/config");
+  $("#o_theme").value=CONFIG.ui.theme||"auto";
+  $("#o_hbytes").value=CONFIG.header.default_bytes||524288;
+  $("#o_min").value=CONFIG.defaults.min_len; $("#o_max").value=CONFIG.defaults.max_len;
+  $("#o_dev").value=CONFIG.defaults.device||"gpu"; $("#o_cp").value=CONFIG.defaults.checkpoint;
+  $("#o_wl").value=CONFIG.defaults.workload; $("#o_temp").value=CONFIG.defaults.temp_abort;
+  const ol=$("#o_lang"); ol.innerHTML=$("#langSel").innerHTML; ol.value=$("#langSel").value;
+  ol.onchange=()=>setLang(ol.value);
+  if(!extWidget){
+    extWidget=new ItemList($("#extList"),{
+      get:()=>(CONFIG.extensions||[]).slice(),
+      transform:v=>v?(v.startsWith(".")?v:"."+v):v,
+      validate:(v,idx,items)=>{ if(!v||v===".")return "—"; const dup=items.findIndex((x,i)=>x.toLowerCase()===v.toLowerCase()&&i!==idx); return dup>=0?"double":null; },
+      commit:items=>{ api("/api/config","POST",{extensions:items}); }
+    });
+  } else extWidget.setItems(CONFIG.extensions||[]);
+}
+async function saveGlobal(){
+  const patch={ ui:{theme:$("#o_theme").value}, header:{default_bytes:+$("#o_hbytes").value},
+    defaults:{min_len:+$("#o_min").value,max_len:+$("#o_max").value,device:$("#o_dev").value,
+      checkpoint:+$("#o_cp").value,workload:+$("#o_wl").value,temp_abort:+$("#o_temp").value} };
+  CONFIG=await api("/api/config","POST",patch); applyTheme($("#o_theme").value);
+  $("#o_globalHint").textContent=T("app_cxt_02"); setTimeout(()=>$("#o_globalHint").textContent="",2000);
+}
+$("#o_saveGlobal").onclick=saveGlobal;
+
+async function loadTargetVc(){
+  const tgt=$("#c_target").value;
+  $("#o_tgtName").textContent=tgt||"—";
+  if(!tgt){ $("#o_tgtNone").style.display="block"; $("#o_tgtBody").style.display="none"; return; }
+  let r; try{ r=await api("/api/vc?target="+encodeURIComponent(tgt)); }catch(e){ return; }
+  const s=r.settings||{}, d=(CONFIG&&CONFIG.defaults)||{};
+  $("#v_min").value=s.min_len||d.min_len||7; $("#v_max").value=s.max_len||d.max_len||10;
+  $("#v_dev").value=s.device||"gpu"; $("#v_cp").value=s.checkpoint||d.checkpoint||300;
+  $("#v_wl").value=s.workload||d.workload||3; $("#v_temp").value=s.temp_abort||d.temp_abort||90;
+  $("#o_tgtBody").style.display="block";
+  $("#o_tgtNone").style.display=r.exists?"none":"block";
+}
+$("#v_save").onclick=async()=>{
+  const tgt=$("#c_target").value; if(!tgt)return;
+  const settings={min_len:+$("#v_min").value,max_len:+$("#v_max").value,device:$("#v_dev").value,
+    checkpoint:+$("#v_cp").value,workload:+$("#v_wl").value,temp_abort:+$("#v_temp").value};
+  const r=await api("/api/vc?target="+encodeURIComponent(tgt),"POST",{settings});
+  $("#v_hint").textContent=r.ok?T("app_cxt_02"):(T("app_cxt_03")+" "+(r.error||"")); setTimeout(()=>$("#v_hint").textContent="",3000);
+};
 
 function fmt(n){ n=+n||0; if(n>=1e9)return (n/1e9).toFixed(2)+" "+T("app_cxt_16"); if(n>=1e6)return (n/1e6).toFixed(1)+" "+T("app_cxt_17"); if(n>=1e3)return (n/1e3).toFixed(1)+T("app_cxt_18"); return String(Math.round(n)); }
 function hms(s){ s=+s||0; const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+T("app_cxt_23")+" ":"")+(m||h?m+T("app_cxt_24")+" ":"")+x+T("app_cxt_25"); }
@@ -258,11 +406,12 @@ document.querySelectorAll("nav.pivot button[data-tab]").forEach(b=>b.onclick=()=
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   b.classList.add("active"); $("#"+b.dataset.tab).classList.add("active");
   if(b.dataset.tab==="stats" && !statsLoaded && !statsBusy) runStats();
+  if(b.dataset.tab==="options") loadConfig().then(loadTargetVc);
 });
 // Theme
 $("#themeBtn").onclick=()=>{ const r=document.documentElement; const cur=r.getAttribute("data-theme");
   r.setAttribute("data-theme", cur==="dark"?"light":"dark"); try{localStorage.setItem("vc_theme",r.getAttribute("data-theme"))}catch(e){} };
-try{const t=localStorage.getItem("vc_theme"); if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}
+try{const t=localStorage.getItem("vc_theme"); if(t&&t!=="auto")document.documentElement.setAttribute("data-theme",t);}catch(e){}
 
 // Cockpit run
 $("#startBtn").onclick=async()=>{

@@ -158,6 +158,124 @@ def i18n_payload(lang=None):
     return {"lang": lang, "native": native, "label_hash": label_hash,
             "lng_hash": lng_hash, "hash_ok": hash_ok, "strings": strings}
 
+# ---------------------------------------------------------------- vcrack.config / .vc
+import datetime
+def _utcnow():
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+DEFAULT_EXT = [".hc", ".tc"]
+
+def write_ini(path, sections):
+    """sections: list of (name, dict) oder (name, list-of-rawlines)."""
+    out = []
+    for name, body in sections:
+        out.append("[%s]" % name)
+        if isinstance(body, dict):
+            for k, v in body.items():
+                if k == "*":
+                    continue
+                out.append("%s = %s" % (k, v))
+        else:
+            for ln in body:
+                out.append(str(ln))
+        out.append("")
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(out).rstrip() + "\n")
+
+def config_load():
+    p = find_res("vcrack.config")
+    ini = read_ini(p) if p else {}
+    def g(sec, key, d): return ini.get(sec, {}).get(key, d)
+    exts = ini.get("extensions", {}).get("*", []) if ini.get("extensions") else []
+    return {
+        "app": {"version": g("app", "version", "1"),
+                "app_version": g("app", "app_version", "1.1.0"),
+                "app_path": g("app", "app_path", WORK),
+                "label_hash": g("app", "label_hash", "")},
+        "ui": {"language": g("ui", "language", "German"),
+               "theme": g("ui", "theme", "auto")},
+        "extensions": [e for e in exts if "=" not in e] or list(DEFAULT_EXT),
+        "header": {"default_bytes": g("header", "default_bytes", "524288")},
+        "defaults": {"min_len": g("defaults", "min_len", "7"),
+                     "max_len": g("defaults", "max_len", "10"),
+                     "hashes": g("defaults", "hashes", ""),
+                     "sizes": g("defaults", "sizes", ""),
+                     "device": g("defaults", "device", "gpu"),
+                     "checkpoint": g("defaults", "checkpoint", "300"),
+                     "workload": g("defaults", "workload", "3"),
+                     "temp_abort": g("defaults", "temp_abort", "90")},
+        "stats": {"global_runtime_sec": g("stats", "global_runtime_sec", "0"),
+                  "global_hash_count": g("stats", "global_hash_count", "0"),
+                  "targets_seen": g("stats", "targets_seen", "0"),
+                  "last_used": g("stats", "last_used", "")},
+    }
+
+def config_save(patch):
+    cfg = config_load()
+    for sec, vals in (patch or {}).items():
+        if sec == "extensions" and isinstance(vals, list):
+            cfg["extensions"] = [str(x) for x in vals]
+        elif sec in cfg and isinstance(cfg[sec], dict) and isinstance(vals, dict):
+            cfg[sec].update({k: str(v) for k, v in vals.items()})
+    lh, _, _ = load_csv_strings()
+    cfg["app"]["label_hash"] = lh
+    cfg["stats"]["last_used"] = _utcnow()
+    write_ini(os.path.join(WORK, "vcrack.config"), [
+        ("app", cfg["app"]), ("ui", cfg["ui"]),
+        ("extensions", cfg["extensions"]),
+        ("header", cfg["header"]), ("defaults", cfg["defaults"]), ("stats", cfg["stats"]),
+    ])
+    return cfg
+
+VC_SECTION_ORDER = ["meta", "target", "header", "settings", "words", "rules", "stats", "progress"]
+VC_LIST_SECTIONS = {"words", "rules"}
+
+def _write_vc(path, ini):
+    sections = []
+    for name in VC_SECTION_ORDER:
+        if name not in ini:
+            continue
+        if name in VC_LIST_SECTIONS:
+            sections.append((name, ini[name].get("*", [])))
+        else:
+            sections.append((name, {k: v for k, v in ini[name].items() if k != "*"}))
+    # keep any unknown sections verbatim at the end
+    for name, body in ini.items():
+        if name not in VC_SECTION_ORDER:
+            sections.append((name, body.get("*", []) if "*" in body else body))
+    write_ini(path, sections)
+
+def vc_find_for(header_name):
+    """Finde die .vc-Datei, deren [header] file == header_name ist."""
+    for d in RES_DIRS:
+        try:
+            for fn in sorted(os.listdir(d)):
+                if fn.lower().endswith(".vc"):
+                    full = os.path.join(d, fn)
+                    ini = read_ini(full)
+                    if ini.get("header", {}).get("file", "") == header_name:
+                        return full, ini
+        except Exception:
+            pass
+    return None, None
+
+def vc_load_settings(header_name):
+    p, ini = vc_find_for(header_name)
+    if not ini:
+        return {"exists": False, "settings": config_load()["defaults"]}
+    s = {k: v for k, v in ini.get("settings", {}).items() if k != "*"}
+    return {"exists": True, "file": os.path.basename(p), "settings": s}
+
+def vc_save_settings(header_name, settings):
+    p, ini = vc_find_for(header_name)
+    if not ini:
+        return {"error": "no .vc for this target yet"}
+    ini.setdefault("settings", {})
+    for k, v in (settings or {}).items():
+        ini["settings"][k] = str(v)
+    _write_vc(p, ini)
+    return {"ok": True, "file": os.path.basename(p)}
+
 def list_targets():
     """Moegliche VeraCrypt-Header im Arbeitsordner (fuer den Ziel-Selektor)."""
     out = []
@@ -346,6 +464,13 @@ class H(http.server.BaseHTTPRequestHandler):
             q = parse_qs(urlparse(self.path).query)
             lang = (q.get("lang", [None])[0]) or None
             self._send(200, i18n_payload(lang))
+        elif p == "/api/config":
+            self._send(200, config_load())
+        elif p == "/api/vc":
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            tgt = (q.get("target", [""])[0]) or ""
+            self._send(200, vc_load_settings(tgt))
         else:
             self._send(404, {"error": "unbekannt"})
 
@@ -359,6 +484,13 @@ class H(http.server.BaseHTTPRequestHandler):
             write_text("rules.txt", raw.decode("utf-8")); self._send(200, {"ok": True}); return
         try: body = json.loads(raw.decode("utf-8")) if raw else {}
         except Exception: body = {}
+        if p == "/api/config":
+            self._send(200, config_save(body)); return
+        if p == "/api/vc":
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            tgt = (q.get("target", [""])[0]) or body.get("target", "")
+            self._send(200, vc_save_settings(tgt, body.get("settings", {}))); return
         if p == "/api/run":
             act = body.get("action")
             if act == "start": self._send(200, start_run(body.get("cfg", {})))

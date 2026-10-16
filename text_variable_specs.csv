@@ -1,14 +1,19 @@
-1-2026-10-16-57f54e3a8e9ab32c
+1-2026-10-16-e0e2baa7ec851b5c
 Index-Number;Variable-Name;Text
 000;app_tab_00;Cockpit
 001;app_tab_01;Statistics
 002;app_tab_02;Rules
 003;app_tab_03;Word list
+004;app_tab_04;Settings
 100;app_cmd_00;Start
 101;app_cmd_01;Stop
 102;app_cmd_02;Save
 103;app_cmd_03;Reload
 104;app_cmd_04;Extract
+105;app_cmd_05;Add
+106;app_cmd_06;Edit
+107;app_cmd_07;Remove
+108;app_cmd_08;Back
 200;app_cxt_00;ready
 201;app_cxt_01;running
 202;app_cxt_02;saved
@@ -79,3 +84,27 @@ Index-Number;Variable-Name;Text
 439;words_lbl_00;Word list (list.txt)
 440;words_cap_00;words
 441;words_txt_00;One word per line. After saving, vcrack only tests the newly added combinations.
+442;options_lbl_00;Global settings
+443;options_lbl_01;Target-specific settings
+444;options_lbl_02;Defaults for new targets
+445;options_cap_00;Language
+446;options_cap_01;Theme
+447;options_cap_02;Recognised file extensions
+448;options_cap_03;Default header bytes
+449;options_cap_04;Length min
+450;options_cap_05;Length max
+451;options_cap_06;Compute device
+452;options_cap_07;Checkpoint (sec)
+453;options_cap_08;Workload (1-4)
+454;options_cap_09;Temp abort (°C)
+455;options_cap_10;Active target
+456;options_drp_00;auto
+457;options_drp_01;light
+458;options_drp_02;dark
+459;options_txt_00;Global settings are stored in vcrack.config. Target settings live in the target .vc file.
+460;options_txt_01;No target selected. Pick a target in the Cockpit tab.
+461;words_txt_01;Maximum 255 words reached. Delete a word before adding a new one.
+462;words_txt_02;Engine limit: at most 64 active words.
+463;words_cap_01;Index
+464;words_cap_02;Used
+465;words_cap_03;Word
