@@ -9,7 +9,18 @@ HERE   = os.path.dirname(os.path.abspath(__file__))
 WORK   = os.environ.get("VCRACK_DIR", HERE)      # Arbeitsordner (hashcat-Ordner)
 PORT   = int(os.environ.get("VCRACK_PORT", "8765"))
 IS_WIN = (os.name == "nt")
-VCRACK = os.path.join(WORK, "vcrack.exe") if IS_WIN else os.path.join(WORK, "vcrack")
+def _find_engine():
+    # Neue Engine (vcrack3, mit --vc) bevorzugen, sonst Fallback.
+    names = ["vcrack3.exe", "vcrack.exe"] if IS_WIN else ["vcrack3", "vcrack"]
+    env = os.environ.get("VCRACK_BIN")
+    if env:
+        return env if os.path.isabs(env) else os.path.join(WORK, env)
+    for n in names:
+        p = os.path.join(WORK, n)
+        if os.path.isfile(p):
+            return p
+    return os.path.join(WORK, names[0])
+VCRACK = _find_engine()
 STATE  = os.path.join(WORK, "vcrack_state.txt")
 LOG    = os.path.join(WORK, "gui_run.log")
 
@@ -20,8 +31,16 @@ run_cfg    = {}
 
 # ---------------------------------------------------------------- Helfer
 def count_done():
+    # Aktive Ziel-.vc hat den Fortschritt eingebettet; sonst die Legacy-State-Datei.
+    src = STATE
     try:
-        with open(STATE, "r", encoding="utf-8", errors="ignore") as f:
+        vp, _ = _active_vc()
+        if vp:
+            src = vp
+    except Exception:
+        pass
+    try:
+        with open(src, "r", encoding="utf-8", errors="ignore") as f:
             return sum(1 for ln in f if ln.startswith("DONE|"))
     except FileNotFoundError:
         return 0
@@ -283,8 +302,50 @@ def vc_save_settings(header_name, settings):
 WORD_ENGINE_LIMIT = 64      # 64-Bit-Masken im Generator-Kern
 WORD_MAX_INDEX    = 255     # Byte-Index laut Issue (0..254)
 WL_META = "list.meta"
+ACTIVE_HEADER = None        # Header-Dateiname des gewaehlten Ziels (bindet die Wortliste an dessen .vc)
+
+def set_active_header(h):
+    global ACTIVE_HEADER
+    ACTIVE_HEADER = h or None
+
+def _active_vc():
+    """(pfad, ini) der aktiven Ziel-.vc, oder (None, None)."""
+    if not ACTIVE_HEADER:
+        return None, None
+    return vc_find_for(ACTIVE_HEADER)
+
+def _done_words(progress_lines):
+    """Woerter, die in irgendeiner abgeschlossenen (DONE) Block-wcsv vorkommen (E1: used bei Block-Ende)."""
+    s = set()
+    for ln in progress_lines:
+        if ln.startswith("DONE|"):
+            p = ln.split("|")
+            if len(p) >= 6:
+                for t in p[5].split(","):
+                    t = t.strip().lower()
+                    if t:
+                        s.add(t)
+    return s
 
 def wl_load():
+    vp, ini = _active_vc()
+    if ini is not None:
+        # Wortliste aus der aktiven .vc; used aus [progress] abgeleitet (E1).
+        done = _done_words(ini.get("progress", {}).get("*", []))
+        words = []
+        for ln in ini.get("words", {}).get("*", []):
+            parts = ln.split(";")
+            if len(parts) < 3:
+                continue
+            try: idx = int(parts[0].strip())
+            except ValueError: continue
+            text = ";".join(parts[2:]).strip()
+            if not text:
+                continue
+            words.append({"index": idx, "used": (text.lower() in done), "text": text})
+        words.sort(key=lambda w: w["index"])
+        return words
+    # Legacy: list.meta (+ Bootstrap aus list.txt). used aus vcrack_state.txt (E1).
     p = os.path.join(WORK, WL_META)
     words = []
     if os.path.isfile(p):
@@ -298,11 +359,9 @@ def wl_load():
                     continue
                 try: idx = int(parts[0].strip())
                 except ValueError: continue
-                used = parts[1].strip() in ("1", "true", "True")
                 text = ";".join(parts[2:]).strip()
-                words.append({"index": idx, "used": used, "text": text})
+                words.append({"index": idx, "used": parts[1].strip() in ("1","true","True"), "text": text})
     else:
-        # Bootstrap aus list.txt (ein Wort pro Zeile) -> Indizes in Reihenfolge, used=0
         lp = os.path.join(WORK, "list.txt")
         if os.path.isfile(lp):
             i = 0
@@ -311,15 +370,28 @@ def wl_load():
                     t = ln.strip()
                     if t:
                         words.append({"index": i, "used": False, "text": t}); i += 1
+    try:
+        with open(os.path.join(WORK, "vcrack_state.txt"), "r", encoding="utf-8", errors="ignore") as f:
+            done = _done_words(list(f))
+        if done:
+            for w in words:
+                w["used"] = (w["text"].lower() in done)
+    except FileNotFoundError:
+        pass
     words.sort(key=lambda w: w["index"])
     return words
 
 def wl_save(words):
     words = sorted(words, key=lambda w: w["index"])
+    vp, ini = _active_vc()
+    if ini is not None:
+        ini.setdefault("words", {})["*"] = ["%d ; %d ; %s" % (w["index"], 1 if w["used"] else 0, w["text"]) for w in words]
+        _write_vc(vp, ini)
+        return words
+    # Legacy: list.meta + list.txt (fuer eine Engine ohne --vc)
     with open(os.path.join(WORK, WL_META), "w", encoding="utf-8", newline="\n") as f:
         for w in words:
             f.write("%d ; %d ; %s\n" % (w["index"], 1 if w["used"] else 0, w["text"]))
-    # list.txt fuer die Engine: aktive (nicht-leere) Woerter in Index-Reihenfolge
     with open(os.path.join(WORK, "list.txt"), "w", encoding="utf-8", newline="\n") as f:
         for w in words:
             if w["text"]:
@@ -378,16 +450,6 @@ def wl_remove(index):
             w["index"] -= 1                       # Luecke schliessen (alle hoeheren unbenutzt)
     return wl_payload(wl_save(words))
 
-def wl_mark_all_used():
-    """Beim Start eines Runs: alle aktiven Woerter auf used=1."""
-    words = wl_load()
-    changed = False
-    for w in words:
-        if w["text"] and not w["used"]:
-            w["used"] = True; changed = True
-    if changed:
-        wl_save(words)
-
 # ---------------------------------------------------------------- Ziel-Automatik (.vc anlegen/laden)
 def _vc_name(header_name, size):
     base = re.sub(r'[\\/:*?"<>|]', "_", header_name)
@@ -398,6 +460,7 @@ def ensure_vc(header_name):
     Beruehrt weder Header-Datei noch vcrack_state (Engine bleibt unangetastet)."""
     if not header_name:
         return {"error": "no target"}
+    set_active_header(header_name)          # Wortliste/Status an die .vc dieses Ziels binden
     p, ini = vc_find_for(header_name)
     if ini:
         return {"created": False, "file": os.path.basename(p),
@@ -566,15 +629,22 @@ def start_run(cfg):
         if run_proc is not None and run_proc.poll() is None:
             return {"error": "laeuft bereits"}
         args = [VCRACK, "run"]
+        # Hat das gewaehlte Ziel eine .vc? Dann ist sie die einzige Quelle (--vc):
+        # Woerter + Regeln + Header + Fortschritt stehen darin, kein --words/--rules/--target.
+        vp = None
+        tgt = cfg.get("target")
+        if tgt:
+            set_active_header(tgt)
+            vp, _ = _active_vc()
+        if vp:
+            args += ["--vc", vp]
         if cfg.get("hash"):  args += ["--hash", str(cfg["hash"])]
         if cfg.get("size"):  args += ["--size", str(cfg["size"])]
         if cfg.get("min"):   args += ["--min",  str(cfg["min"])]
         if cfg.get("max"):   args += ["--max",  str(cfg["max"])]
         if cfg.get("device"):args += ["--device", str(cfg["device"])]
-        if cfg.get("target"):args += ["--target", str(cfg["target"])]
+        if not vp and cfg.get("target"): args += ["--target", str(cfg["target"])]
         if cfg.get("checkpoint") is not None: args += ["--checkpoint", str(cfg["checkpoint"])]
-        try: wl_mark_all_used()          # alle aktiven Woerter als "in einem Run benutzt" markieren
-        except Exception: pass
         logf = open(LOG, "wb")
         kw = {}
         if IS_WIN:

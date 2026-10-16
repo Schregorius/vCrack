@@ -433,6 +433,7 @@ $("#targetRefresh").onclick=loadTargets;
 async function selectTarget(){
   const t=$("#c_target").value; if(!t) return;
   try{ await api("/api/target/select?name="+encodeURIComponent(t)); }catch(e){}
+  loadWords();   // Wortliste ist jetzt zielgebunden (.vc [words])
   if($("#options").classList.contains("active")) loadTargetVc();
 }
 $("#c_target").onchange=selectTarget;
