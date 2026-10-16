@@ -302,17 +302,22 @@ def vc_save_settings(header_name, settings):
 WORD_ENGINE_LIMIT = 64      # 64-Bit-Masken im Generator-Kern
 WORD_MAX_INDEX    = 255     # Byte-Index laut Issue (0..254)
 WL_META = "list.meta"
-ACTIVE_HEADER = None        # Header-Dateiname des gewaehlten Ziels (bindet die Wortliste an dessen .vc)
+ACTIVE_HEADER = None        # Header-Dateiname des gewaehlten Ziels (Anzeige)
+ACTIVE_VC_PATH = None        # Pfad der aktiven .vc (massgeblich; kein erneutes Nachschlagen)
 
 def set_active_header(h):
     global ACTIVE_HEADER
     ACTIVE_HEADER = h or None
 
+def set_active_vc(path):
+    global ACTIVE_VC_PATH
+    ACTIVE_VC_PATH = path or None
+
 def _active_vc():
     """(pfad, ini) der aktiven Ziel-.vc, oder (None, None)."""
-    if not ACTIVE_HEADER:
-        return None, None
-    return vc_find_for(ACTIVE_HEADER)
+    if ACTIVE_VC_PATH and os.path.isfile(ACTIVE_VC_PATH):
+        return ACTIVE_VC_PATH, read_ini(ACTIVE_VC_PATH)
+    return None, None
 
 def _done_words(progress_lines):
     """Woerter, die in irgendeiner abgeschlossenen (DONE) Block-wcsv vorkommen (E1: used bei Block-Ende)."""
@@ -463,6 +468,7 @@ def ensure_vc(header_name):
     set_active_header(header_name)          # Wortliste/Status an die .vc dieses Ziels binden
     p, ini = vc_find_for(header_name)
     if ini:
+        set_active_vc(p)
         return {"created": False, "file": os.path.basename(p),
                 "settings": {k: v for k, v in ini.get("settings", {}).items() if k != "*"}}
     hp = None
@@ -471,16 +477,27 @@ def ensure_vc(header_name):
         if os.path.isfile(cand):
             hp = cand; break
     size = os.path.getsize(hp) if hp else 0
+    cfg = config_load(); d = cfg["defaults"]
+    name = _vc_name(header_name, size)
+    # NIE eine vorhandene .vc ueberschreiben: existiert die (nach Name) schon, adoptieren
+    # (vor jeder teuren Arbeit wie dem Header-Hash).
+    existing = os.path.join(WORK, name)
+    if os.path.isfile(existing):
+        ex = read_ini(existing)
+        set_active_vc(existing)
+        hdr = ex.get("header", {}).get("file")
+        if hdr: set_active_header(hdr)
+        return {"created": False, "file": name,
+                "settings": {k: v for k, v in ex.get("settings", {}).items() if k != "*"}}
+    # Nur beim echten Neuanlegen den Header hashen (nicht bei jeder Ziel-Wahl).
     sha = ""
-    if hp:
+    if hp and os.path.getsize(hp) <= 8 * 1024 * 1024:   # nur Header-grosse Dateien hashen
         import hashlib
         h = hashlib.sha256()
         with open(hp, "rb") as f:
             for chunk in iter(lambda: f.read(65536), b""):
                 h.update(chunk)
         sha = h.hexdigest()
-    cfg = config_load(); d = cfg["defaults"]
-    name = _vc_name(header_name, size)
     words = ["%d ; %d ; %s" % (w["index"], 1 if w["used"] else 0, w["text"]) for w in wl_load()]
     rules = []
     rp = os.path.join(WORK, "rules.txt")
@@ -503,6 +520,7 @@ def ensure_vc(header_name):
         "progress": {"*": []},   # leer; die Engine haengt DONE/PART direkt ans Dateiende an
     }
     _write_vc(os.path.join(WORK, name), ini)
+    set_active_vc(os.path.join(WORK, name))
     return {"created": True, "file": name, "settings": ini["settings"]}
 
 def list_targets():
@@ -634,7 +652,7 @@ def start_run(cfg):
         vp = None
         tgt = cfg.get("target")
         if tgt:
-            set_active_header(tgt)
+            ensure_vc(tgt)          # findet/adoptiert/erstellt die .vc (kein Overwrite), setzt sie aktiv
             vp, _ = _active_vc()
         if vp:
             args += ["--vc", vp]
