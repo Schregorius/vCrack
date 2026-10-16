@@ -27,3 +27,7 @@ vcrack.config
 # Python-Cache
 __pycache__/
 *.pyc
+
+# Interne Planungsdokumente - nicht oeffentlich
+docs/FRAGEN.md
+docs/ENTSCHEIDUNGEN.md
