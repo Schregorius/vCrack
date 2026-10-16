@@ -388,8 +388,68 @@ def wl_mark_all_used():
     if changed:
         wl_save(words)
 
+# ---------------------------------------------------------------- Ziel-Automatik (.vc anlegen/laden)
+def _vc_name(header_name, size):
+    base = re.sub(r'[\\/:*?"<>|]', "_", header_name)
+    return "%s-%d.vc" % (base, size)
+
+def ensure_vc(header_name):
+    """Beim Waehlen eines Ziels: vorhandene .vc laden, sonst additiv neu anlegen.
+    Beruehrt weder Header-Datei noch vcrack_state (Engine bleibt unangetastet)."""
+    if not header_name:
+        return {"error": "no target"}
+    p, ini = vc_find_for(header_name)
+    if ini:
+        return {"created": False, "file": os.path.basename(p),
+                "settings": {k: v for k, v in ini.get("settings", {}).items() if k != "*"}}
+    hp = None
+    for d in RES_DIRS:
+        cand = os.path.join(d, header_name)
+        if os.path.isfile(cand):
+            hp = cand; break
+    size = os.path.getsize(hp) if hp else 0
+    sha = ""
+    if hp:
+        import hashlib
+        h = hashlib.sha256()
+        with open(hp, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        sha = h.hexdigest()
+    cfg = config_load(); d = cfg["defaults"]
+    name = _vc_name(header_name, size)
+    words = ["%d ; %d ; %s" % (w["index"], 1 if w["used"] else 0, w["text"]) for w in wl_load()]
+    rules = []
+    rp = os.path.join(WORK, "rules.txt")
+    if os.path.isfile(rp):
+        for ln in open(rp, "r", encoding="utf-8", errors="ignore"):
+            s = ln.strip()
+            if s and not s.startswith("#"):
+                rules.append(s)
+    ini = {
+        "meta": {"version": "1", "created": _utcnow(),
+                 "app_version": cfg["app"]["app_version"], "label_hash": cfg["app"]["label_hash"]},
+        "target": {"name": header_name, "size": size},
+        "header": {"file": header_name, "bytes": cfg["header"]["default_bytes"], "sha256": sha},
+        "settings": {"min_len": d["min_len"], "max_len": d["max_len"], "hashes": d["hashes"],
+                     "sizes": d["sizes"], "device": d["device"], "checkpoint": d["checkpoint"],
+                     "workload": d["workload"], "temp_abort": d["temp_abort"]},
+        "words": {"*": words},
+        "rules": {"*": rules},
+        "stats": {"runtime_sec": "0", "hashes_tested": "0", "found": "0"},
+        "progress": {"state_file": os.path.splitext(name)[0] + ".state"},
+    }
+    _write_vc(os.path.join(WORK, name), ini)
+    return {"created": True, "file": name, "settings": ini["settings"]}
+
 def list_targets():
-    """Moegliche VeraCrypt-Header im Arbeitsordner (fuer den Ziel-Selektor)."""
+    """Moegliche VeraCrypt-Header im Arbeitsordner (fuer den Ziel-Selektor).
+    Endungen kommen aus vcrack.config [extensions] (+ Heuristik 'vc_header')."""
+    try:
+        exts = [e.lower() if e.startswith(".") else "." + e.lower()
+                for e in config_load().get("extensions", DEFAULT_EXT)]
+    except Exception:
+        exts = list(DEFAULT_EXT)
     out = []
     try:
         for fn in sorted(os.listdir(WORK)):
@@ -397,7 +457,9 @@ def list_targets():
             full = os.path.join(WORK, fn)
             if not os.path.isfile(full):
                 continue
-            if low.endswith(".tc") or low.endswith(".hc") or "vc_header" in low:
+            if low.endswith(".vc") or low.endswith(".state") or low.endswith(".lng"):
+                continue
+            if any(low.endswith(e) for e in exts) or "vc_header" in low:
                 out.append({"name": fn, "size": os.path.getsize(full)})
     except Exception:
         pass
@@ -405,6 +467,9 @@ def list_targets():
 
 def extract_header(src, nbytes, target):
     """vcrack header ... --json aufrufen."""
+    if not nbytes:
+        try: nbytes = int(config_load()["header"]["default_bytes"])
+        except Exception: nbytes = 524288
     args = ["header", "--src", str(src)]
     if nbytes:  args += ["--bytes", str(int(nbytes))]
     if target:  args += ["--target", str(target)]
@@ -587,6 +652,10 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(200, vc_load_settings(tgt))
         elif p == "/api/wordlist":
             self._send(200, wl_payload())
+        elif p == "/api/target/select":
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            self._send(200, ensure_vc((q.get("name", [""])[0]) or ""))
         else:
             self._send(404, {"error": "unbekannt"})
 

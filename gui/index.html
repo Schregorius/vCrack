@@ -149,7 +149,6 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
       <div class="hint" style="margin-bottom:10px" data-i18n="cockpit_txt_00">Copies the first bytes of a VeraCrypt volume/container into a header file that vcrack then tests. The original is left unchanged.</div>
       <div class="row">
         <div class="field" style="flex:2;min-width:280px"><label data-i18n="cockpit_cap_08">Source (volume/container file)</label><input type="text" id="h_src" data-i18n-ph="cockpit_cap_19" placeholder="e.g. E:\\my_videos.hc or \\\\.\\F:"></div>
-        <div class="field"><label data-i18n="cockpit_cap_09">Bytes</label><input type="number" id="h_bytes" value="524288" min="512" step="512"></div>
         <div class="field" style="flex:1.5;min-width:200px"><label data-i18n="cockpit_cap_10">Target file</label><input type="text" id="h_target" value="Fvc_header.tc"></div>
         <div class="field"><button class="btn" id="h_go"><span data-i18n="app_cmd_04">Extract</span></button></div>
       </div>
@@ -430,6 +429,13 @@ async function loadTargets(){
   }catch(e){}
 }
 $("#targetRefresh").onclick=loadTargets;
+// Ziel-Wahl automatisiert: .vc laden/erstellen (Issue Automate Header-Functions)
+async function selectTarget(){
+  const t=$("#c_target").value; if(!t) return;
+  try{ await api("/api/target/select?name="+encodeURIComponent(t)); }catch(e){}
+  if($("#options").classList.contains("active")) loadTargetVc();
+}
+$("#c_target").onchange=selectTarget;
 
 // Header auslesen
 $("#h_go").onclick=async()=>{
@@ -437,7 +443,7 @@ $("#h_go").onclick=async()=>{
   if(!src){ $("#h_status").textContent=T("app_cxt_06"); return; }
   $("#h_go").disabled=true; $("#h_status").textContent=T("app_cxt_07");
   try{
-    const r=await api("/api/header","POST",{src,bytes:+$("#h_bytes").value,target:$("#h_target").value.trim()||"Fvc_header.tc"});
+    const r=await api("/api/header","POST",{src,target:$("#h_target").value.trim()||"Fvc_header.tc"});
     if(r.ok){ $("#h_status").innerHTML=`✓ ${fmt(r.bytes)} Bytes → <b>${r.target}</b> ${T("app_cxt_26")}`; await loadTargets(); $("#c_target").value=r.target; }
     else { $("#h_status").textContent=T("app_cxt_03")+" "+(r.error||T("app_cxt_12")); }
   }catch(e){ $("#h_status").textContent=T("app_cxt_03")+" "+e; }
