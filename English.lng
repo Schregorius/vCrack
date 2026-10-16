@@ -1,0 +1,83 @@
+English
+57f54e3a8e9ab32c
+
+
+000;Cockpit
+001;Statistics
+002;Rules
+003;Word list
+100;Start
+101;Stop
+102;Save
+103;Reload
+104;Extract
+200;ready
+201;running
+202;saved
+203;Error:
+204;no active block
+205;starting…
+206;Please provide a source.
+207;reading header …
+208;Estimating keyspace, measuring H/s & runtimes (needs the GPU) …
+209;computing…
+210;Up to date. ⟳ to recompute.
+211;✔ PASSWORD FOUND!
+212;unknown
+213;Candidates
+214;Blocks
+215;Keyspace
+216;bn
+217;M
+218;k
+219;days
+220;h
+221;min
+222;sec
+223;h
+224;m
+225;s
+226;extracted
+227;Length
+400;Light/Dark
+401;Attack
+402;Extract header
+403;Live status
+404;Log
+405;Hash
+406;Cipher size
+407;Length min
+408;Length max
+409;Compute device
+410;Checkpoint (sec)
+411;Target (header)
+412;Reload targets
+413;Source (volume/container file)
+414;Bytes
+415;Target file
+416;Speed
+417;GPU temperature
+418;GPU utilization
+419;Fan
+420;GPU clock
+421;Block ETA
+422;Runtime
+423;Blocks total
+424;e.g. E:\my_videos.hc or \\.\F:
+425;all
+426;GPU
+427;GPU+CPU
+428;CPU
+429;Copies the first bytes of a VeraCrypt volume/container into a header file that vcrack then tests. The original is left unchanged.
+430;Statistics
+431;Keyspace
+432;Runtime per mode
+433;Recalculate
+434;Mode
+435;Code
+436;H/s
+437;Runtime
+438;Rules (rules.txt)
+439;Word list (list.txt)
+440;words
+441;One word per line. After saving, vcrack only tests the newly added combinations.

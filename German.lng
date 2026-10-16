@@ -1,0 +1,83 @@
+Deutsch
+57f54e3a8e9ab32c
+vcrack-Team
+
+000;Cockpit
+001;Statistik
+002;Regeln
+003;Wortliste
+100;Start
+101;Stop
+102;Speichern
+103;Neu laden
+104;Auslesen
+200;bereit
+201;laeuft
+202;gespeichert ✓
+203;Fehler:
+204;kein Block aktiv
+205;starte…
+206;Bitte eine Quelle angeben.
+207;lese Header …
+208;Keyspace schaetzen, H/s messen & Laufzeiten berechnen (braucht die GPU) …
+209;rechne…
+210;Aktuell. ⟳ zum Neuberechnen.
+211;✔ PASSWORT GEFUNDEN!
+212;unbekannt
+213;Kandidaten
+214;Bloecke
+215;Keyspace
+216;Mrd.
+217;Mio.
+218;k
+219;Tage
+220;Std
+221;Min
+222;Sek
+223;h
+224;m
+225;s
+226;extrahiert
+227;Laenge
+400;Hell/Dunkel
+401;Angriff
+402;Header auslesen
+403;Live-Status
+404;Protokoll
+405;Hash
+406;Cipher-Groesse
+407;Laenge min
+408;Laenge max
+409;Rechenwerk
+410;Checkpoint (Sek)
+411;Ziel (Header)
+412;Ziele neu einlesen
+413;Quelle (Volume/Containerdatei)
+414;Bytes
+415;Zieldatei
+416;Geschwindigkeit
+417;GPU-Temperatur
+418;GPU-Auslastung
+419;Luefter
+420;GPU-Takt
+421;Block-Restzeit
+422;Laufzeit
+423;Bloecke gesamt
+424;z.B. E:\meine_videos.hc oder \\.\F:
+425;alle
+426;GPU
+427;GPU+CPU
+428;CPU
+429;Kopiert die ersten Bytes eines VeraCrypt-Volumes/Containers in eine Header-Datei, die vcrack dann testet. Das Original bleibt unveraendert.
+430;Statistik
+431;Keyspace
+432;Laufzeit pro Modus
+433;Neu berechnen
+434;Modus
+435;Code
+436;H/s
+437;Laufzeit
+438;Regeln (rules.txt)
+439;Wortliste (list.txt)
+440;Woerter
+441;Ein Wort pro Zeile. Nach dem Speichern testet vcrack nur die neu hinzugekommenen Kombinationen.

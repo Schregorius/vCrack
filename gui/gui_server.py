@@ -37,6 +37,127 @@ def write_text(name, content):
     with open(os.path.join(WORK, name), "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
 
+# ---------------------------------------------------------------- Ressourcen / i18n
+# text_variable_specs.csv und die <Language>.lng liegen im App-Ordner (WORK);
+# fuer die Entwicklung auch neben dem Server (HERE) oder im Repo-Root darueber.
+RES_DIRS = [WORK, HERE, os.path.dirname(HERE)]
+
+def find_res(name):
+    for d in RES_DIRS:
+        p = os.path.join(d, name)
+        if os.path.isfile(p):
+            return p
+    return None
+
+def read_ini(path):
+    """Minimaler INI-Reader: {section: {key: value}} + {section:'__list__': [lines]}.
+    Fuer vcrack.config und .vc (gleiches Format). Listen-Sektionen (words/rules/extensions)
+    liefern zusaetzlich die Rohzeilen unter dem Schluessel '*'. Unbekannte Zeilen bleiben erhalten."""
+    data = {}
+    cur = None
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            for raw in f:
+                ln = raw.rstrip("\n").rstrip("\r")
+                s = ln.strip()
+                if not s or s.startswith("#"):
+                    continue
+                if s.startswith("[") and s.endswith("]"):
+                    cur = s[1:-1].strip().lower()
+                    data.setdefault(cur, {}).setdefault("*", [])
+                    continue
+                if cur is None:
+                    continue
+                data[cur]["*"].append(s)
+                if "=" in ln:
+                    k, v = ln.split("=", 1)
+                    data[cur][k.strip().lower()] = v.strip()
+    except FileNotFoundError:
+        pass
+    return data
+
+def load_csv_strings():
+    """-> (label_hash, idx2var, var2eng). Englischer Master aus text_variable_specs.csv."""
+    p = find_res("text_variable_specs.csv")
+    label_hash, idx2var, var2eng = "", {}, {}
+    if not p:
+        return label_hash, idx2var, var2eng
+    with open(p, "r", encoding="utf-8", errors="ignore") as f:
+        lines = [ln.rstrip("\n").rstrip("\r") for ln in f]
+    if lines:
+        label_hash = lines[0].split("-")[-1].strip()
+    for ln in lines[2:]:
+        if not ln.strip():
+            continue
+        parts = ln.split(";")
+        if len(parts) < 3:
+            continue
+        idx, var, text = parts[0].strip(), parts[1].strip(), ";".join(parts[2:])
+        idx2var[idx] = var
+        var2eng[var] = text
+    return label_hash, idx2var, var2eng
+
+def parse_lng(path):
+    """-> (native_name, lng_hash, {idx: text})."""
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = [ln.rstrip("\n").rstrip("\r") for ln in f]
+    native = lines[0].strip() if len(lines) > 0 else ""
+    lhash  = lines[1].strip() if len(lines) > 1 else ""
+    entries = {}
+    for ln in lines[3:]:
+        if ";" in ln:
+            idx, text = ln.split(";", 1)
+            if idx.strip():
+                entries[idx.strip()] = text
+    return native, lhash, entries
+
+def list_languages():
+    """Alle gefundenen <Language>.lng (einmalig je Basisname)."""
+    seen, out = set(), []
+    for d in RES_DIRS:
+        try:
+            for fn in sorted(os.listdir(d)):
+                if fn.lower().endswith(".lng"):
+                    name = fn[:-4]
+                    if name in seen:
+                        continue
+                    seen.add(name)
+                    native, lhash, _ = parse_lng(os.path.join(d, fn))
+                    out.append({"name": name, "native": native, "hash": lhash})
+        except Exception:
+            pass
+    return out
+
+def active_language(default=None):
+    """Aus vcrack.config [ui] language, sonst Default (German falls vorhanden, sonst English)."""
+    cfgp = find_res("vcrack.config")
+    if cfgp:
+        cfg = read_ini(cfgp)
+        lang = cfg.get("ui", {}).get("language")
+        if lang:
+            return lang
+    if default:
+        return default
+    langs = {l["name"] for l in list_languages()}
+    return "German" if "German" in langs else ("English" if langs else "English")
+
+def i18n_payload(lang=None):
+    label_hash, idx2var, var2eng = load_csv_strings()
+    if not lang:
+        lang = active_language()
+    strings = dict(var2eng)            # englischer Fallback zuerst
+    native, lng_hash = lang, ""
+    lp = find_res(lang + ".lng")
+    if lp:
+        native, lng_hash, entries = parse_lng(lp)
+        for idx, text in entries.items():
+            var = idx2var.get(idx)
+            if var:
+                strings[var] = text
+    hash_ok = (lng_hash == label_hash) if lng_hash else None
+    return {"lang": lang, "native": native, "label_hash": label_hash,
+            "lng_hash": lng_hash, "hash_ok": hash_ok, "strings": strings}
+
 def list_targets():
     """Moegliche VeraCrypt-Header im Arbeitsordner (fuer den Ziel-Selektor)."""
     out = []
@@ -214,6 +335,17 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(200, read_text("rules.txt"), "text/plain")
         elif p == "/api/targets":
             self._send(200, {"targets": list_targets()})
+        elif p == "/api/languages":
+            act = active_language()
+            langs = list_languages()
+            for l in langs:
+                l["active"] = (l["name"] == act)
+            self._send(200, {"languages": langs, "active": act})
+        elif p == "/api/i18n":
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            lang = (q.get("lang", [None])[0]) or None
+            self._send(200, i18n_payload(lang))
         else:
             self._send(404, {"error": "unbekannt"})
 

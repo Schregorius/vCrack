@@ -38,7 +38,9 @@ header .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
 header .spacer{flex:1}
 .toggle{border:1px solid var(--line);background:var(--card2);color:var(--text);
   border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer}
-nav.pivot{display:flex;gap:4px;padding:4px 22px 0}
+select.lang{border:1px solid var(--line);background:var(--card2);color:var(--text);
+  border-radius:20px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+nav.pivot{display:flex;gap:4px;padding:4px 22px 0;flex-wrap:wrap}
 nav.pivot button{border:0;background:transparent;color:var(--sub);font-size:14px;font-weight:600;
   padding:9px 14px 11px;cursor:pointer;border-bottom:2.5px solid transparent;font-family:inherit}
 nav.pivot button.active{color:var(--text);border-bottom-color:var(--accent)}
@@ -51,7 +53,7 @@ main{padding:14px 22px 30px}
 .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:12px;color:var(--sub)}
-select,input[type=number]{font-family:inherit;font-size:14px;color:var(--text);background:var(--card2);
+select,input[type=number],input[type=text]{font-family:inherit;font-size:14px;color:var(--text);background:var(--card2);
   border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:92px}
 input[type=number]{min-width:80px}
 button.btn{font-family:inherit;font-size:14px;font-weight:600;border:0;border-radius:6px;
@@ -91,19 +93,23 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
 .ksrow .pct{width:56px;text-align:right;color:var(--sub)}
 .hint{font-size:12px;color:var(--sub);margin-top:8px}
 .big{font-size:26px;font-weight:700;margin:2px 0}
+.i18nwarn{background:linear-gradient(90deg,rgba(157,93,0,.18),transparent);border:1px solid var(--warn);
+  border-radius:var(--radius);padding:8px 12px;margin:0 22px 6px;font-size:12px;color:var(--text);display:none}
 </style>
 </head>
 <body>
 <header>
   <h1>vcrack</h1><span class="dot" id="dot"></span><span id="statetext" style="font-size:13px;color:var(--sub)"></span>
   <span class="spacer"></span>
-  <button class="toggle" id="themeBtn">◐ Hell/Dunkel</button>
+  <select class="lang" id="langSel" title="Language"></select>
+  <button class="toggle" id="themeBtn">◐ <span data-i18n="app_cap_00">Light/Dark</span></button>
 </header>
+<div class="i18nwarn" id="i18nwarn"></div>
 <nav class="pivot">
-  <button data-tab="cockpit" class="active">Cockpit</button>
-  <button data-tab="stats">Statistik</button>
-  <button data-tab="rules">Regeln</button>
-  <button data-tab="words">Wortliste</button>
+  <button data-tab="cockpit" class="active" data-i18n="app_tab_00">Cockpit</button>
+  <button data-tab="stats" data-i18n="app_tab_01">Statistics</button>
+  <button data-tab="rules" data-i18n="app_tab_02">Rules</button>
+  <button data-tab="words" data-i18n="app_tab_03">Word list</button>
 </nav>
 <main>
 
@@ -111,54 +117,54 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
   <section class="tab active" id="cockpit">
     <div id="foundBox"></div>
     <div class="card">
-      <h2>Angriff</h2>
+      <h2 data-i18n="cockpit_lbl_00">Attack</h2>
       <div class="row">
-        <div class="field"><label>Hash</label><select id="c_hash">
-          <option value="">alle</option><option>SHA-512</option><option>Whirlpool</option><option>Streebog</option><option>SHA-256</option></select></div>
-        <div class="field"><label>Cipher-Groesse</label><select id="c_size">
-          <option value="">alle</option><option>512</option><option>1024</option><option>1536</option></select></div>
-        <div class="field"><label>Laenge min</label><input type="number" id="c_min" value="7" min="1" max="30"></div>
-        <div class="field"><label>Laenge max</label><input type="number" id="c_max" value="10" min="1" max="30"></div>
-        <div class="field"><label>Rechenwerk</label><select id="c_dev"><option value="gpu">GPU</option><option value="both">GPU+CPU</option><option value="cpu">CPU</option></select></div>
-        <div class="field"><label>Checkpoint (Sek)</label><input type="number" id="c_cp" value="300" min="0" step="30"></div>
-        <div class="field" style="min-width:220px"><label>Ziel (Header)</label>
+        <div class="field"><label data-i18n="cockpit_cap_00">Hash</label><select id="c_hash">
+          <option value="" data-i18n="cockpit_drp_00">all</option><option>SHA-512</option><option>Whirlpool</option><option>Streebog</option><option>SHA-256</option></select></div>
+        <div class="field"><label data-i18n="cockpit_cap_01">Cipher size</label><select id="c_size">
+          <option value="" data-i18n="cockpit_drp_00">all</option><option>512</option><option>1024</option><option>1536</option></select></div>
+        <div class="field"><label data-i18n="cockpit_cap_02">Length min</label><input type="number" id="c_min" value="7" min="1" max="30"></div>
+        <div class="field"><label data-i18n="cockpit_cap_03">Length max</label><input type="number" id="c_max" value="10" min="1" max="30"></div>
+        <div class="field"><label data-i18n="cockpit_cap_04">Compute device</label><select id="c_dev"><option value="gpu" data-i18n="cockpit_drp_01">GPU</option><option value="both" data-i18n="cockpit_drp_02">GPU+CPU</option><option value="cpu" data-i18n="cockpit_drp_03">CPU</option></select></div>
+        <div class="field"><label data-i18n="cockpit_cap_05">Checkpoint (sec)</label><input type="number" id="c_cp" value="300" min="0" step="30"></div>
+        <div class="field" style="min-width:220px"><label data-i18n="cockpit_cap_06">Target (header)</label>
           <div style="display:flex;gap:6px">
             <select id="c_target" style="flex:1"></select>
-            <button class="btn gray iconbtn" id="targetRefresh" title="Ziele neu einlesen" style="padding:0 10px">⟳</button>
+            <button class="btn gray iconbtn" id="targetRefresh" data-i18n-title="cockpit_cap_07" title="Reload targets" style="padding:0 10px">⟳</button>
           </div></div>
-        <div class="field"><button class="btn" id="startBtn">▶ Start</button></div>
-        <div class="field"><button class="btn red" id="stopBtn" disabled>■ Stop</button></div>
+        <div class="field"><button class="btn" id="startBtn">▶ <span data-i18n="app_cmd_00">Start</span></button></div>
+        <div class="field"><button class="btn red" id="stopBtn" disabled>■ <span data-i18n="app_cmd_01">Stop</span></button></div>
       </div>
     </div>
     <div class="card">
-      <h2>Header auslesen</h2>
-      <div class="hint" style="margin-bottom:10px">Kopiert die ersten Bytes eines VeraCrypt-Volumes/Containers in eine Header-Datei, die vcrack dann testet. Das Original bleibt unveraendert.</div>
+      <h2 data-i18n="cockpit_lbl_01">Extract header</h2>
+      <div class="hint" style="margin-bottom:10px" data-i18n="cockpit_txt_00">Copies the first bytes of a VeraCrypt volume/container into a header file that vcrack then tests. The original is left unchanged.</div>
       <div class="row">
-        <div class="field" style="flex:2;min-width:280px"><label>Quelle (Volume/Containerdatei)</label><input type="text" id="h_src" placeholder="z.B. E:\\meine_videos.hc oder \\\\.\\F:"></div>
-        <div class="field"><label>Bytes</label><input type="number" id="h_bytes" value="524288" min="512" step="512"></div>
-        <div class="field" style="flex:1.5;min-width:200px"><label>Zieldatei</label><input type="text" id="h_target" value="Fvc_header.tc"></div>
-        <div class="field"><button class="btn" id="h_go">Auslesen</button></div>
+        <div class="field" style="flex:2;min-width:280px"><label data-i18n="cockpit_cap_08">Source (volume/container file)</label><input type="text" id="h_src" data-i18n-ph="cockpit_cap_19" placeholder="e.g. E:\\my_videos.hc or \\\\.\\F:"></div>
+        <div class="field"><label data-i18n="cockpit_cap_09">Bytes</label><input type="number" id="h_bytes" value="524288" min="512" step="512"></div>
+        <div class="field" style="flex:1.5;min-width:200px"><label data-i18n="cockpit_cap_10">Target file</label><input type="text" id="h_target" value="Fvc_header.tc"></div>
+        <div class="field"><button class="btn" id="h_go"><span data-i18n="app_cmd_04">Extract</span></button></div>
       </div>
       <div class="hint" id="h_status" style="margin-top:8px"></div>
     </div>
     <div class="card">
-      <h2>Live-Status</h2>
+      <h2 data-i18n="cockpit_lbl_02">Live status</h2>
       <div class="tiles">
-        <div class="tile"><div class="k">Geschwindigkeit</div><div class="v" id="t_speed">–</div></div>
-        <div class="tile"><div class="k">GPU-Temperatur</div><div class="v" id="t_temp">–</div></div>
-        <div class="tile"><div class="k">GPU-Auslastung</div><div class="v" id="t_util">–</div></div>
-        <div class="tile"><div class="k">Luefter</div><div class="v" id="t_fan">–</div></div>
-        <div class="tile"><div class="k">GPU-Takt</div><div class="v" id="t_core">–</div></div>
-        <div class="tile"><div class="k">Block-Restzeit</div><div class="v" id="t_eta">–</div></div>
-        <div class="tile"><div class="k">Laufzeit</div><div class="v" id="t_time">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_11">Speed</div><div class="v" id="t_speed">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_12">GPU temperature</div><div class="v" id="t_temp">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_13">GPU utilization</div><div class="v" id="t_util">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_14">Fan</div><div class="v" id="t_fan">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_15">GPU clock</div><div class="v" id="t_core">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_16">Block ETA</div><div class="v" id="t_eta">–</div></div>
+        <div class="tile"><div class="k" data-i18n="cockpit_cap_17">Runtime</div><div class="v" id="t_time">–</div></div>
       </div>
-      <div class="prog-label"><span id="blockDesc">kein Block aktiv</span><span id="blockPct"></span></div>
+      <div class="prog-label"><span id="blockDesc"></span><span id="blockPct"></span></div>
       <div class="bar"><i id="blockBar"></i></div>
-      <div class="prog-label"><span id="overallLabel">Bloecke gesamt</span><span id="overallPct"></span></div>
+      <div class="prog-label"><span id="overallLabel" data-i18n="cockpit_cap_18">Blocks total</span><span id="overallPct"></span></div>
       <div class="bar"><i id="overallBar"></i></div>
     </div>
     <div class="card">
-      <h2>Protokoll</h2>
+      <h2 data-i18n="cockpit_lbl_03">Log</h2>
       <pre class="log" id="log">—</pre>
     </div>
   </section>
@@ -167,17 +173,17 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
   <section class="tab" id="stats">
     <div class="card">
       <div style="display:flex;align-items:center;gap:12px">
-        <h2 style="margin:0;flex:1">Statistik</h2>
-        <button class="iconbtn" id="statsRefresh" title="Neu berechnen">⟳</button>
+        <h2 style="margin:0;flex:1" data-i18n="statistic_lbl_00">Statistics</h2>
+        <button class="iconbtn" id="statsRefresh" data-i18n-title="statistic_cap_00" title="Recalculate">⟳</button>
       </div>
       <div class="hint" id="statsStatus" style="margin-top:10px">—</div>
     </div>
     <div class="card">
-      <h2>Keyspace</h2>
+      <h2 data-i18n="statistic_lbl_01">Keyspace</h2>
       <div id="ksResult"><div class="hint">—</div></div>
     </div>
     <div class="card">
-      <h2>Laufzeit pro Modus</h2>
+      <h2 data-i18n="statistic_lbl_02">Runtime per mode</h2>
       <div id="etResult"><div class="hint">—</div></div>
     </div>
   </section>
@@ -185,11 +191,11 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
   <!-- REGELN -->
   <section class="tab" id="rules">
     <div class="card">
-      <h2>Regeln (rules.txt)</h2>
+      <h2 data-i18n="rules_lbl_00">Rules (rules.txt)</h2>
       <textarea id="rulesText" spellcheck="false"></textarea>
       <div class="row" style="margin-top:12px">
-        <button class="btn" id="rulesSave">Speichern</button>
-        <button class="btn gray" id="rulesReload">Neu laden</button>
+        <button class="btn" id="rulesSave"><span data-i18n="app_cmd_02">Save</span></button>
+        <button class="btn gray" id="rulesReload"><span data-i18n="app_cmd_03">Reload</span></button>
         <div class="hint" id="rulesHint"></div>
       </div>
     </div>
@@ -198,12 +204,12 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
   <!-- WORTLISTE -->
   <section class="tab" id="words">
     <div class="card">
-      <h2>Wortliste (list.txt) — <span id="wordCount">0</span> Woerter</h2>
+      <h2><span data-i18n="words_lbl_00">Word list (list.txt)</span> — <span id="wordCount">0</span> <span data-i18n="words_cap_00">words</span></h2>
       <textarea id="wordsText" spellcheck="false"></textarea>
       <div class="row" style="margin-top:12px">
-        <button class="btn" id="wordsSave">Speichern</button>
-        <button class="btn gray" id="wordsReload">Neu laden</button>
-        <div class="hint">Ein Wort pro Zeile. Nach dem Speichern testet vcrack nur die neu hinzugekommenen Kombinationen.</div>
+        <button class="btn" id="wordsSave"><span data-i18n="app_cmd_02">Save</span></button>
+        <button class="btn gray" id="wordsReload"><span data-i18n="app_cmd_03">Reload</span></button>
+        <div class="hint" data-i18n="words_txt_00">One word per line. After saving, vcrack only tests the newly added combinations.</div>
       </div>
     </div>
   </section>
@@ -212,16 +218,46 @@ th{color:var(--sub);font-weight:600;font-size:12px;text-transform:uppercase;lett
 <script>
 const $=s=>document.querySelector(s);
 const api=(p,m,b)=>fetch(p,{method:m||"GET",body:b?(typeof b==="string"?b:JSON.stringify(b)):undefined}).then(r=>r.headers.get("content-type").includes("json")?r.json():r.text());
-function fmt(n){ n=+n||0; if(n>=1e9)return (n/1e9).toFixed(2)+" Mrd."; if(n>=1e6)return (n/1e6).toFixed(1)+" Mio."; if(n>=1e3)return (n/1e3).toFixed(1)+"k"; return String(Math.round(n)); }
-function hms(s){ s=+s||0; const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+"h ":"")+(m||h?m+"m ":"")+x+"s"; }
-function eta(sec){ if(sec<0)return "?"; const d=sec/86400,h=sec/3600,m=sec/60; if(d>=1)return d.toFixed(1)+" Tage"; if(h>=1)return h.toFixed(1)+" Std"; if(m>=1)return m.toFixed(1)+" Min"; return Math.round(sec)+" Sek"; }
+
+// ---------------- i18n ----------------
+let I18N={};
+function T(v,params){
+  let s=(v in I18N)? I18N[v] : v;
+  if(params) for(const k in params) s=s.split("{"+k+"}").join(params[k]);
+  return s;
+}
+function applyI18n(){
+  document.querySelectorAll("[data-i18n]").forEach(el=>{ el.textContent=T(el.getAttribute("data-i18n")); });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el=>{ el.setAttribute("placeholder",T(el.getAttribute("data-i18n-ph"))); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el=>{ el.setAttribute("title",T(el.getAttribute("data-i18n-title"))); });
+}
+async function loadLanguages(){
+  try{
+    const r=await api("/api/languages"); const sel=$("#langSel"); sel.innerHTML="";
+    for(const l of (r.languages||[])){ const o=document.createElement("option"); o.value=l.name; o.textContent=l.native||l.name; if(l.active)o.selected=true; sel.appendChild(o); }
+  }catch(e){}
+}
+async function loadI18n(lang){
+  try{
+    const r=await api("/api/i18n"+(lang?("?lang="+encodeURIComponent(lang)):""));
+    I18N=r.strings||{}; applyI18n();
+    const w=$("#i18nwarn");
+    if(r.hash_ok===false){ w.style.display="block"; w.textContent="⚠ "+(r.native||r.lang||"")+": label-hash "+(r.lng_hash||"?")+" ≠ "+(r.label_hash||"?")+" — translation may be out of date."; }
+    else { w.style.display="none"; }
+  }catch(e){}
+}
+$("#langSel").onchange=()=>{ loadI18n($("#langSel").value); try{localStorage.setItem("vc_lang",$("#langSel").value)}catch(e){} };
+
+function fmt(n){ n=+n||0; if(n>=1e9)return (n/1e9).toFixed(2)+" "+T("app_cxt_16"); if(n>=1e6)return (n/1e6).toFixed(1)+" "+T("app_cxt_17"); if(n>=1e3)return (n/1e3).toFixed(1)+T("app_cxt_18"); return String(Math.round(n)); }
+function hms(s){ s=+s||0; const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+T("app_cxt_23")+" ":"")+(m||h?m+T("app_cxt_24")+" ":"")+x+T("app_cxt_25"); }
+function eta(sec){ if(sec<0)return "?"; const d=sec/86400,h=sec/3600,m=sec/60; if(d>=1)return d.toFixed(1)+" "+T("app_cxt_19"); if(h>=1)return h.toFixed(1)+" "+T("app_cxt_20"); if(m>=1)return m.toFixed(1)+" "+T("app_cxt_21"); return Math.round(sec)+" "+T("app_cxt_22"); }
 
 // Tabs
-document.querySelectorAll("nav.pivot button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll("nav.pivot button").forEach(x=>x.classList.remove("active"));
+document.querySelectorAll("nav.pivot button[data-tab]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav.pivot button[data-tab]").forEach(x=>x.classList.remove("active"));
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   b.classList.add("active"); $("#"+b.dataset.tab).classList.add("active");
-  if(b.dataset.tab==="stats" && !statsLoaded && !statsBusy) runStats();  // beim ersten Oeffnen automatisch rechnen
+  if(b.dataset.tab==="stats" && !statsLoaded && !statsBusy) runStats();
 });
 // Theme
 $("#themeBtn").onclick=()=>{ const r=document.documentElement; const cur=r.getAttribute("data-theme");
@@ -235,13 +271,13 @@ $("#startBtn").onclick=async()=>{
 };
 $("#stopBtn").onclick=async()=>{ await api("/api/run","POST",{action:"stop"}); poll(); };
 
-// Ziel-Selektor (vorhandene Header im Ordner)
+// Ziel-Selektor
 async function loadTargets(){
   try{
     const r=await api("/api/targets"); const sel=$("#c_target"); const prev=sel.value;
     sel.innerHTML="";
     const ts=(r.targets||[]);
-    if(!ts.length){ const o=document.createElement("option"); o.value="Fvc_header.tc"; o.textContent="Fvc_header.tc (nicht gefunden)"; sel.appendChild(o); }
+    if(!ts.length){ const o=document.createElement("option"); o.value="Fvc_header.tc"; o.textContent="Fvc_header.tc (—)"; sel.appendChild(o); }
     for(const t of ts){ const o=document.createElement("option"); o.value=t.name; o.textContent=`${t.name} (${(t.size/1024).toFixed(0)} KB)`; sel.appendChild(o); }
     if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
   }catch(e){}
@@ -251,20 +287,20 @@ $("#targetRefresh").onclick=loadTargets;
 // Header auslesen
 $("#h_go").onclick=async()=>{
   const src=$("#h_src").value.trim();
-  if(!src){ $("#h_status").textContent="Bitte eine Quelle angeben."; return; }
-  $("#h_go").disabled=true; $("#h_status").textContent="lese Header …";
+  if(!src){ $("#h_status").textContent=T("app_cxt_06"); return; }
+  $("#h_go").disabled=true; $("#h_status").textContent=T("app_cxt_07");
   try{
     const r=await api("/api/header","POST",{src,bytes:+$("#h_bytes").value,target:$("#h_target").value.trim()||"Fvc_header.tc"});
-    if(r.ok){ $("#h_status").innerHTML=`✓ ${fmt(r.bytes)} Bytes -> <b>${r.target}</b> extrahiert.`; await loadTargets(); $("#c_target").value=r.target; }
-    else { $("#h_status").textContent="Fehler: "+(r.error||"unbekannt"); }
-  }catch(e){ $("#h_status").textContent="Fehler: "+e; }
+    if(r.ok){ $("#h_status").innerHTML=`✓ ${fmt(r.bytes)} Bytes → <b>${r.target}</b> ${T("app_cxt_26")}`; await loadTargets(); $("#c_target").value=r.target; }
+    else { $("#h_status").textContent=T("app_cxt_03")+" "+(r.error||T("app_cxt_12")); }
+  }catch(e){ $("#h_status").textContent=T("app_cxt_03")+" "+e; }
   $("#h_go").disabled=false;
 };
 
 async function poll(){
   let s; try{ s=await api("/api/status"); }catch(e){ return; }
   $("#dot").className="dot"+(s.running?" on":"");
-  $("#statetext").textContent=s.running?"laeuft":"bereit";
+  $("#statetext").textContent=s.running?T("app_cxt_01"):T("app_cxt_00");
   $("#startBtn").disabled=s.running; $("#stopBtn").disabled=!s.running;
   $("#t_speed").innerHTML = s.speed? fmt(s.speed)+" <small>H/s</small>" : "–";
   $("#t_temp").innerHTML  = s.temp?  s.temp+" <small>°C</small>" : "–";
@@ -274,49 +310,48 @@ async function poll(){
   const etaSec = (s.speed>0 && s.prog_max>s.prog_cur)? (s.prog_max-s.prog_cur)/s.speed : -1;
   $("#t_eta").textContent = etaSec>=0? eta(etaSec) : "–";
   $("#t_time").textContent= s.elapsed? hms(s.elapsed):"–";
-  $("#blockDesc").textContent = s.block_desc || (s.running?"starte…":"kein Block aktiv");
+  $("#blockDesc").textContent = s.block_desc || (s.running?T("app_cxt_05"):T("app_cxt_04"));
   const bp = s.prog_max? (100*s.prog_cur/s.prog_max):0;
   $("#blockBar").style.width=bp+"%"; $("#blockPct").textContent=s.prog_max? bp.toFixed(1)+"%":"";
   const op = s.block_total? (100*s.done_blocks/s.block_total):0;
   $("#overallBar").style.width=op+"%";
-  $("#overallLabel").textContent=`Bloecke: ${s.done_blocks}${s.block_total?" / "+s.block_total:""}`;
+  $("#overallLabel").textContent=`${T("app_cxt_14")}: ${s.done_blocks}${s.block_total?" / "+s.block_total:""}`;
   $("#overallPct").textContent = s.block_total? op.toFixed(1)+"%":"";
   $("#log").textContent = s.tail || "—";
-  $("#foundBox").innerHTML = s.found ? `<div class="found"><b>✔ PASSWORT GEFUNDEN!</b><div class="pw">${(s.password||"").replace(/</g,"&lt;")}</div></div>` : "";
+  $("#foundBox").innerHTML = s.found ? `<div class="found"><b>${T("app_cxt_11")}</b><div class="pw">${(s.password||"").replace(/</g,"&lt;")}</div></div>` : "";
 }
-setInterval(poll, 1500); poll();
+setInterval(poll, 1500);
 
-// Statistik: beim ersten Oeffnen automatisch alle Schritte der Reihe nach; ⟳ = neu berechnen.
+// Statistik
 let statsLoaded=false, statsBusy=false;
 function renderKs(r){
-  if(r.error){ $("#ksResult").innerHTML="<div class='hint'>Fehler: "+r.error+"</div>"; return; }
+  if(r.error){ $("#ksResult").innerHTML="<div class='hint'>"+T("app_cxt_03")+" "+r.error+"</div>"; return; }
   const total=+r.keyspace||0;
   let rows=""; for(const d of Object.keys(r.perlen||{})){ const v=r.perlen[d], frac=total? v/total:0;
-    rows+=`<div class="ksrow"><span class="lab">Laenge ${d}</span><span class="num">${fmt(v)}</span>
+    rows+=`<div class="ksrow"><span class="lab">${T("app_cxt_27")} ${d}</span><span class="num">${fmt(v)}</span>
       <span class="kbar"><i style="width:${(frac*100).toFixed(1)}%"></i></span><span class="pct">${(frac*100).toFixed(1)}%</span></div>`; }
   const ci=(+r.ci_pct||0); const cistr = ci>0? ` <small style="font-size:14px;color:var(--sub)">± ${ci.toFixed(1)}%</small>`:"";
-  $("#ksResult").innerHTML=`<div class="big">${fmt(total)} Kandidaten${cistr}</div>${rows||"<div class='hint'>—</div>"}`;
+  $("#ksResult").innerHTML=`<div class="big">${fmt(total)} ${T("app_cxt_13")}${cistr}</div>${rows||"<div class='hint'>—</div>"}`;
 }
 function renderEt(r){
-  if(r.error){ $("#etResult").innerHTML="<div class='hint'>Fehler: "+r.error+"</div>"; return; }
+  if(r.error){ $("#etResult").innerHTML="<div class='hint'>"+T("app_cxt_03")+" "+r.error+"</div>"; return; }
   let rows="";
   for(const m of (r.modes||[])){ rows+=`<tr><td>${m.hash} / XTS-${m.size}</td><td>${m.code}</td><td>${m.hs>0?fmt(m.hs)+" H/s":"?"}</td><td>${eta(m.eta_sec)}</td></tr>`; }
-  $("#etResult").innerHTML=`<div class="hint">Keyspace: ${fmt(+r.keyspace||0)}</div>
-    <table><thead><tr><th>Modus</th><th>Code</th><th>H/s</th><th>Laufzeit</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("#etResult").innerHTML=`<div class="hint">${T("app_cxt_15")}: ${fmt(+r.keyspace||0)}</div>
+    <table><thead><tr><th>${T("statistic_cap_01")}</th><th>${T("statistic_cap_02")}</th><th>${T("statistic_cap_03")}</th><th>${T("statistic_cap_04")}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function runStats(){
   if(statsBusy) return; statsBusy=true;
   const ref=$("#statsRefresh"); ref.classList.add("spin");
   try{
-    $("#statsStatus").textContent="Keyspace schaetzen, H/s messen & Laufzeiten berechnen (braucht die GPU) …";
-    $("#ksResult").innerHTML="<div class='hint'>rechne…</div>";
-    $("#etResult").innerHTML="<div class='hint'>rechne…</div>";
-    // Ein einziger Aufruf liefert Keyspace, Verteilung je Laenge, H/s und ETA.
+    $("#statsStatus").textContent=T("app_cxt_08");
+    $("#ksResult").innerHTML="<div class='hint'>"+T("app_cxt_09")+"</div>";
+    $("#etResult").innerHTML="<div class='hint'>"+T("app_cxt_09")+"</div>";
     const r=await api("/api/estimate","POST",{min:+$("#c_min").value,max:+$("#c_max").value,hash:$("#c_hash").value,size:$("#c_size").value,device:$("#c_dev").value});
     renderKs(r); renderEt(r);
-    $("#statsStatus").textContent = r.error? ("Fehler: "+r.error) : "Aktuell. ⟳ zum Neuberechnen.";
+    $("#statsStatus").textContent = r.error? (T("app_cxt_03")+" "+r.error) : T("app_cxt_10");
     statsLoaded=!r.error;
-  }catch(e){ $("#statsStatus").textContent="Fehler: "+e; }
+  }catch(e){ $("#statsStatus").textContent=T("app_cxt_03")+" "+e; }
   ref.classList.remove("spin"); statsBusy=false;
 }
 $("#statsRefresh").onclick=runStats;
@@ -325,10 +360,18 @@ $("#statsRefresh").onclick=runStats;
 async function loadRules(){ $("#rulesText").value=await api("/api/rules"); }
 async function loadWords(){ const t=await api("/api/words"); $("#wordsText").value=t; $("#wordCount").textContent=t.split(/\r?\n/).filter(x=>x.trim()).length; }
 $("#rulesReload").onclick=loadRules;
-$("#rulesSave").onclick=async()=>{ await api("/api/rules","POST",$("#rulesText").value); $("#rulesHint").textContent="gespeichert ✓"; setTimeout(()=>$("#rulesHint").textContent="",2000); };
+$("#rulesSave").onclick=async()=>{ await api("/api/rules","POST",$("#rulesText").value); $("#rulesHint").textContent=T("app_cxt_02"); setTimeout(()=>$("#rulesHint").textContent="",2000); };
 $("#wordsReload").onclick=loadWords;
 $("#wordsSave").onclick=async()=>{ await api("/api/words","POST",$("#wordsText").value); loadWords(); };
-loadRules(); loadWords(); loadTargets();
+
+// Startup
+(async()=>{
+  let saved=null; try{saved=localStorage.getItem("vc_lang")}catch(e){}
+  await loadLanguages();
+  if(saved){ const sel=$("#langSel"); if([...sel.options].some(o=>o.value===saved)) sel.value=saved; }
+  await loadI18n($("#langSel").value||saved);
+  loadRules(); loadWords(); loadTargets(); poll();
+})();
 </script>
 </body>
 </html>

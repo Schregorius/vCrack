@@ -1,0 +1,81 @@
+1-2026-10-16-57f54e3a8e9ab32c
+Index-Number;Variable-Name;Text
+000;app_tab_00;Cockpit
+001;app_tab_01;Statistics
+002;app_tab_02;Rules
+003;app_tab_03;Word list
+100;app_cmd_00;Start
+101;app_cmd_01;Stop
+102;app_cmd_02;Save
+103;app_cmd_03;Reload
+104;app_cmd_04;Extract
+200;app_cxt_00;ready
+201;app_cxt_01;running
+202;app_cxt_02;saved
+203;app_cxt_03;Error:
+204;app_cxt_04;no active block
+205;app_cxt_05;starting…
+206;app_cxt_06;Please provide a source.
+207;app_cxt_07;reading header …
+208;app_cxt_08;Estimating keyspace, measuring H/s & runtimes (needs the GPU) …
+209;app_cxt_09;computing…
+210;app_cxt_10;Up to date. ⟳ to recompute.
+211;app_cxt_11;✔ PASSWORD FOUND!
+212;app_cxt_12;unknown
+213;app_cxt_13;Candidates
+214;app_cxt_14;Blocks
+215;app_cxt_15;Keyspace
+216;app_cxt_16;bn
+217;app_cxt_17;M
+218;app_cxt_18;k
+219;app_cxt_19;days
+220;app_cxt_20;h
+221;app_cxt_21;min
+222;app_cxt_22;sec
+223;app_cxt_23;h
+224;app_cxt_24;m
+225;app_cxt_25;s
+226;app_cxt_26;extracted
+227;app_cxt_27;Length
+400;app_cap_00;Light/Dark
+401;cockpit_lbl_00;Attack
+402;cockpit_lbl_01;Extract header
+403;cockpit_lbl_02;Live status
+404;cockpit_lbl_03;Log
+405;cockpit_cap_00;Hash
+406;cockpit_cap_01;Cipher size
+407;cockpit_cap_02;Length min
+408;cockpit_cap_03;Length max
+409;cockpit_cap_04;Compute device
+410;cockpit_cap_05;Checkpoint (sec)
+411;cockpit_cap_06;Target (header)
+412;cockpit_cap_07;Reload targets
+413;cockpit_cap_08;Source (volume/container file)
+414;cockpit_cap_09;Bytes
+415;cockpit_cap_10;Target file
+416;cockpit_cap_11;Speed
+417;cockpit_cap_12;GPU temperature
+418;cockpit_cap_13;GPU utilization
+419;cockpit_cap_14;Fan
+420;cockpit_cap_15;GPU clock
+421;cockpit_cap_16;Block ETA
+422;cockpit_cap_17;Runtime
+423;cockpit_cap_18;Blocks total
+424;cockpit_cap_19;e.g. E:\my_videos.hc or \\.\F:
+425;cockpit_drp_00;all
+426;cockpit_drp_01;GPU
+427;cockpit_drp_02;GPU+CPU
+428;cockpit_drp_03;CPU
+429;cockpit_txt_00;Copies the first bytes of a VeraCrypt volume/container into a header file that vcrack then tests. The original is left unchanged.
+430;statistic_lbl_00;Statistics
+431;statistic_lbl_01;Keyspace
+432;statistic_lbl_02;Runtime per mode
+433;statistic_cap_00;Recalculate
+434;statistic_cap_01;Mode
+435;statistic_cap_02;Code
+436;statistic_cap_03;H/s
+437;statistic_cap_04;Runtime
+438;rules_lbl_00;Rules (rules.txt)
+439;words_lbl_00;Word list (list.txt)
+440;words_cap_00;words
+441;words_txt_00;One word per line. After saving, vcrack only tests the newly added combinations.
